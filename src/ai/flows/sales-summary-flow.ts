@@ -63,6 +63,16 @@ Você receberá dois arquivos:
     - Identifique discrepâncias: Vendedores com muitos atendimentos mas baixa conversão, ou vendedores com poucas vendas mas um Bilhete Médio muito alto.
     - **Taxa de Oportunidade**: Analise a proporção de Potenciais para Atendimentos. Vendedores que convertem potenciais agregam muito valor.
 
+**Classificação de Desempenho (Taxa de Conversão):**
+Use a tabela a seguir como referência para classificar o desempenho da taxa de conversão e para embasar suas recomendações.
+
+| Categoria            | Faixa de Conversão (%) | Descrição                                                               |
+| -------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| **Excelente**        | Acima de **70%**       | Vendedora com alta eficiência de vendas. Domina técnicas de fechamento. |
+| **Bom**              | **65% a 70%**          | Boa taxa de conversão, acima da média. Há consistência.                 |
+| **Regular**          | **60% a 64%**          | Conversão aceitável, mas com espaço para melhorar abordagem.            |
+| **Baixo Desempenho** | Abaixo de **60%**      | Necessita treinamento e acompanhamento de perto.                        |
+
 Com base nesta análise aprofundada, forneça um resumo conciso, destaques principais e recomendações que ajudem a direcionar treinamentos e estratégias de vendas.
 
 **Para os Destaques Individuais, siga estas regras RIGOROSAMENTE para garantir a precisão:**
