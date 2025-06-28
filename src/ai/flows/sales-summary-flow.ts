@@ -1,10 +1,10 @@
 'use server';
 /**
- * @fileOverview An AI flow for analyzing and summarizing sales data from a CSV.
+ * @fileOverview Um fluxo de IA para analisar e resumir dados de vendas de um CSV.
  *
- * - summarizeSalesData - A function that takes CSV data and returns an AI-generated analysis.
- * - SalesSummaryInput - The input type for the summarizeSalesData function.
- * - SalesSummaryOutput - The return type for the summarizeSalesData function.
+ * - summarizeSalesData - Uma função que recebe dados CSV e retorna uma análise gerada por IA.
+ * - SalesSummaryInput - O tipo de entrada para a função summarizeSalesData.
+ * - SalesSummaryOutput - O tipo de retorno para a função summarizeSalesData.
  */
 
 import { ai } from '@/ai/genkit';
