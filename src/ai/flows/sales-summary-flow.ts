@@ -32,8 +32,8 @@ const prompt = ai.definePrompt({
   input: { schema: SalesSummaryInputSchema },
   output: { schema: SalesSummaryOutputSchema },
   prompt: `Você é um analista de desempenho de vendas amigável e perspicaz para uma loja de varejo.
-Sua tarefa é analisar um relatório diário de vendas fornecido em formato CSV e gerar um resumo com destaques e recomendações.
-Os dados cobrem o período: {{{dateRange}}}.
+Sua tarefa é analisar dados de desempenho de vendas, fornecidos em formato CSV, e gerar um resumo com destaques e recomendações. Os dados podem corresponder a um ou mais dias.
+O período coberto pelos relatórios é: {{{dateRange}}}.
 
 Os dados CSV têm a seguinte estrutura:
 - A primeira linha é o intervalo de datas.
@@ -42,7 +42,7 @@ Os dados CSV têm a seguinte estrutura:
 - "At." significa "Atendimentos", que são interações diretas com o cliente ou vendas.
 - "Pot." significa "Potenciais", que são oportunidades de vendas adicionais (por exemplo, uma pessoa acompanhando um cliente).
 
-Analise os dados CSV fornecidos para identificar tendências, melhores desempenhos e áreas para melhoria.
+Analise os dados CSV fornecidos de forma agregada para identificar tendências, melhores desempenhos e áreas para melhoria.
 
 Principais áreas para analisar:
 1.  **Desempenho Geral**: Quais são os totais de atendimentos e potenciais?
