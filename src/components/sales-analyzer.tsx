@@ -25,9 +25,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 // Tipos para dados de Atendimento
 type HourlyData = {
@@ -753,6 +754,21 @@ export default function SalesAnalyzer() {
                             <div><h3 className="font-semibold text-base mb-2">Resumo Geral</h3><p className="leading-relaxed text-muted-foreground">{aiSummary.summary}</p></div>
                             <div><h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2 text-muted-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
                             <div><h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2 text-muted-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+                            {aiSummary.individualHighlights && aiSummary.individualHighlights.length > 0 && (
+                                <div>
+                                    <h3 className="font-semibold flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-primary"/>Destaques Individuais</h3>
+                                    <Accordion type="single" collapsible className="w-full">
+                                        {aiSummary.individualHighlights.map((item, index) => (
+                                            <AccordionItem value={`item-${index}`} key={index}>
+                                                <AccordionTrigger className="font-medium hover:no-underline">{item.salesperson}</AccordionTrigger>
+                                                <AccordionContent className="text-muted-foreground">
+                                                    {item.highlight}
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        ))}
+                                    </Accordion>
+                                </div>
+                            )}
                          </CardContent>
                       </Card>)}
                      {!aiSummary && !isAiLoading && loadedSalesFiles.length === 0 && loadedAttendanceFiles.length > 0 && (

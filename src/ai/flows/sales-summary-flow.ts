@@ -21,6 +21,10 @@ const SalesSummaryOutputSchema = z.object({
   summary: z.string().describe('Um resumo conciso e perspicaz dos dados de vendas e atendimentos em 3-5 frases, escrito em um tom amigável e encorajador. Deve ser uma visão geral de alto nível.'),
   highlights: z.array(z.string()).describe('Uma lista de 3-4 pontos destacando observações importantes, como melhores desempenhos em conversão, receita, tendências ou discrepâncias interessantes entre atendimentos e vendas.'),
   recommendations: z.array(z.string()).describe('Uma lista de 2-3 recomendações acionáveis e específicas com base nos dados para ajudar a melhorar o desempenho geral. Ex: "Vendedor X tem alto volume de atendimento mas baixa conversão, sugerir treinamento de fechamento".'),
+  individualHighlights: z.array(z.object({
+    salesperson: z.string().describe('O nome do vendedor(a).'),
+    highlight: z.string().describe('Um destaque conciso e perspicaz sobre o desempenho individual do vendedor(a), focando em seu ponto mais forte ou em uma área clara de melhoria.')
+  })).describe('Uma lista de destaques individuais para cada vendedor(a) nos dados.')
 });
 export type SalesSummaryOutput = z.infer<typeof SalesSummaryOutputSchema>;
 
@@ -60,6 +64,11 @@ Você receberá dois arquivos:
     - **Taxa de Oportunidade**: Analise a proporção de Potenciais para Atendimentos. Vendedores que convertem potenciais agregam muito valor.
 
 Com base nesta análise aprofundada, forneça um resumo conciso, destaques principais e recomendações que ajudem a direcionar treinamentos e estratégias de vendas.
+
+**Além disso, para CADA vendedor(a) presente nos dados, crie um "Destaque Individual"**:
+-   Para cada vendedor(a), escreva uma única frase que resuma seu principal ponto forte ou a oportunidade de melhoria mais evidente.
+-   Exemplos: "Edilma se destaca na geração de receita, sendo a líder em vendas totais.", "A taxa de conversão de Pedrina é uma área de oportunidade, dado seu alto volume de atendimentos.", "Kemilly tem o maior ticket médio, mostrando foco em vendas de alto valor."
+-   Preencha o campo 'individualHighlights' com esses destaques, um para cada vendedor.
 
 Aqui estão os dados de ATENDIMENTO:
 \`\`\`csv
