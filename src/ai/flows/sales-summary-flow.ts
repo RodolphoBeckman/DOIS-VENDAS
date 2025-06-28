@@ -65,10 +65,13 @@ Você receberá dois arquivos:
 
 Com base nesta análise aprofundada, forneça um resumo conciso, destaques principais e recomendações que ajudem a direcionar treinamentos e estratégias de vendas.
 
-**Além disso, para CADA vendedor(a) presente nos dados, crie um "Destaque Individual"**:
--   Para cada vendedor(a), escreva uma única frase que resuma seu principal ponto forte ou a oportunidade de melhoria mais evidente.
--   Exemplos: "Edilma se destaca na geração de receita, sendo a líder em vendas totais.", "A taxa de conversão de Pedrina é uma área de oportunidade, dado seu alto volume de atendimentos.", "Kemilly tem o maior ticket médio, mostrando foco em vendas de alto valor."
--   Preencha o campo 'individualHighlights' com esses destaques, um para cada vendedor.
+**Para os Destaques Individuais, siga estas regras RIGOROSAMENTE para garantir a precisão:**
+1.  **Verifique os Fatos**: Antes de afirmar que um(a) vendedor(a) é "o(a) melhor" ou "líder" em qualquer métrica (Taxa de Conversão, Receita, Ticket Médio, etc.), compare seu valor com o de TODOS os outros para ter certeza absoluta de que a afirmação é verdadeira e factual. A precisão é a maior prioridade.
+2.  **Seja Específico e Baseado em Dados**: Baseie cada destaque em uma métrica clara dos dados.
+    -   Exemplo de ponto forte: "Maria se destaca como líder em taxa de conversão (75%)."
+    -   Exemplo de oportunidade: "A taxa de conversão de João (25%) é uma área de oportunidade, considerando seu alto volume de atendimentos."
+3.  **Evite Generalizações**: Não faça afirmações vagas. A análise deve ser puramente factual, baseada nos dados CSV fornecidos.
+4.  **Crie um Destaque para CADA Vendedor(a)**: Para cada vendedor(a) nos dados, escreva uma única frase que resuma seu principal ponto forte ou a oportunidade de melhoria mais clara, seguindo as regras acima. Preencha o campo 'individualHighlights' com estes destaques.
 
 Aqui estão os dados de ATENDIMENTO:
 \`\`\`csv
