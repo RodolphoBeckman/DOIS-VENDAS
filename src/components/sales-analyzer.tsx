@@ -481,19 +481,19 @@ export default function SalesAnalyzer() {
 
   const uniqueSalespeople = useMemo(() => ['all', ...consolidatedData.map(d => d.salesperson).sort()], [consolidatedData]);
 
-  const filteredDataBySalesperson = useMemo(() => {
+  const displayData = useMemo(() => {
     if (selectedSalesperson === 'all') return consolidatedData;
     return consolidatedData.filter(d => d.salesperson === selectedSalesperson);
   }, [consolidatedData, selectedSalesperson]);
   
-  const totalAttendances = useMemo(() => filteredDataBySalesperson.reduce((sum, p) => sum + p.totalAttendances, 0), [filteredDataBySalesperson]);
-  const totalSalesCount = useMemo(() => filteredDataBySalesperson.reduce((sum, p) => sum + p.salesCount, 0), [filteredDataBySalesperson]);
-  const totalRevenue = useMemo(() => filteredDataBySalesperson.reduce((sum, p) => sum + p.totalRevenue, 0), [filteredDataBySalesperson]);
+  const totalAttendances = useMemo(() => displayData.reduce((sum, p) => sum + p.totalAttendances, 0), [displayData]);
+  const totalSalesCount = useMemo(() => displayData.reduce((sum, p) => sum + p.salesCount, 0), [displayData]);
+  const totalRevenue = useMemo(() => displayData.reduce((sum, p) => sum + p.totalRevenue, 0), [displayData]);
   const averageConversionRate = useMemo(() => totalAttendances > 0 ? (totalSalesCount / totalAttendances) : 0, [totalAttendances, totalSalesCount]);
 
   const hourlyTotals = useMemo(() => {
     const totals = new Map<number, { attendances: number, potentials: number }>();
-    filteredDataBySalesperson.forEach(person => {
+    displayData.forEach(person => {
         person.hourly.forEach(h => {
             const current = totals.get(h.hour) || { attendances: 0, potentials: 0 };
             current.attendances += h.attendances;
@@ -504,10 +504,10 @@ export default function SalesAnalyzer() {
     return Array.from(totals.entries())
         .map(([hour, data]) => ({ name: `${String(hour).padStart(2, '0')}:00`, atendimentos: data.attendances, potenciais: data.potentials }))
         .sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredDataBySalesperson]);
+  }, [displayData]);
 
   const performanceBySalespersonChartData = useMemo(() => {
-    return filteredDataBySalesperson
+    return displayData
       .filter(item => item.totalAttendances > 0 || item.salesCount > 0)
       .map(item => ({
         name: item.salesperson.split(' ')[0],
@@ -516,7 +516,7 @@ export default function SalesAnalyzer() {
         receita: item.totalRevenue,
       }))
       .sort((a, b) => b.receita - a.receita);
-  }, [filteredDataBySalesperson]);
+  }, [displayData]);
   
   return (
     <div className="min-h-screen animate-in fade-in-50 bg-secondary/50">
@@ -659,7 +659,7 @@ export default function SalesAnalyzer() {
                                 <Table>
                                     <TableHeader><TableRow><TableHead>Vendedor(a)</TableHead><TableHead className="text-right">Atend.</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead className="text-right">Conversão</TableHead><TableHead className="text-right">Receita</TableHead><TableHead className="text-right">Ticket Médio</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {filteredDataBySalesperson.length > 0 ? filteredDataBySalesperson.sort((a,b) => b.totalRevenue - a.totalRevenue).map(item => (
+                                        {displayData.length > 0 ? displayData.sort((a,b) => b.totalRevenue - a.totalRevenue).map(item => (
                                             <TableRow key={item.salesperson}>
                                                 <TableCell className="font-medium">{item.salesperson}</TableCell>
                                                 <TableCell className="text-right">{item.totalAttendances}</TableCell>
@@ -694,8 +694,8 @@ export default function SalesAnalyzer() {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <DollarSign className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </CardTitle>
-                            </Header>
+                                </Title>
+                            </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de vendas (PDV)</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
@@ -706,8 +706,8 @@ export default function SalesAnalyzer() {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <Users className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </CardTitle>
-                            </Header>
+                                </Title>
+                            </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
