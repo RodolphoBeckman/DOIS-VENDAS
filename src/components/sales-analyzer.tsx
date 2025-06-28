@@ -722,7 +722,7 @@ export default function SalesAnalyzer() {
                                             <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
                                             <SortableHeader tKey="conversionRate" label="Conversão" className="text-right" />
                                             <SortableHeader tKey="totalRevenue" label="Receita" className="text-right" />
-                                            <SortableHeader tKey="averageTicket" label="Ticket Médio" className="text-right" />
+                                            <SortableHeader tKey="averageTicket" label="Tkt. Médio" className="text-right" />
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
