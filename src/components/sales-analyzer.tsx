@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
@@ -713,7 +713,7 @@ export default function SalesAnalyzer() {
                                 </CardTitle>
                             </Header>
                             <CardContent>
-                                <p className="text-muted-foreground">Você carregou os dados de vendas. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
+                                <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
                         </Card>
                      )}
