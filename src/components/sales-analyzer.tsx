@@ -68,6 +68,14 @@ type ConsolidatedData = SalespersonPerformance & SalespersonSales & {
     conversionRate: number;
 };
 
+const cleanSalespersonName = (name: string): string => {
+    if (!name) return '';
+    return name
+        .replace(/^\d+-\d+\s+/, '') // Remove prefix like "1-7 "
+        .replace(/\s*\([^)]+\)$/, '') // Remove suffix like " (FUNCIONARIO)"
+        .trim();
+};
+
 const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } | null => {
     try {
         const parts = rangeStr.split('-').map(p => p.trim());
@@ -114,8 +122,9 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
     const parsedData: SalespersonPerformance[] = [];
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
-        const salesperson = values[0];
-        if (salesperson.toLowerCase() === 'total' || !salesperson) continue;
+        const rawSalesperson = values[0];
+        if (rawSalesperson.toLowerCase() === 'total' || !rawSalesperson) continue;
+        const salesperson = cleanSalespersonName(rawSalesperson);
         const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
         for(let i = 1; i < values.length; i++) {
             if (i > columns.length) continue;
@@ -149,11 +158,11 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const parsedData: SalespersonSales[] = [];
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
-        const salespersonName = values[2]; // 'Nome do Vendedor'
-        if (salespersonName?.toLowerCase() === 'total' || !salespersonName) continue;
+        const rawSalespersonName = values[2]; // 'Nome do Vendedor'
+        if (rawSalespersonName?.toLowerCase() === 'total' || !rawSalespersonName) continue;
         
         parsedData.push({
-            salesperson: salespersonName,
+            salesperson: cleanSalespersonName(rawSalespersonName),
             salesCount: parseIntSimple(values[4]),       // 'Vendas'
             itemsPerSale: parseFloatSimple(values[8]),   // 'PA'
             totalRevenue: parseCurrency(values[10]),      // 'Total Vendas'
