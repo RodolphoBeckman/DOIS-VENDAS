@@ -10,13 +10,13 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const SalesSummaryInputSchema = z.object({
+const SalesSummaryInputSchema = z.object({
   csvData: z.string().describe('The full content of the sales data CSV file.'),
   dateRange: z.string().describe('The date range for the provided data (e.g., "2024/01/01 - 2024/01/31").'),
 });
 export type SalesSummaryInput = z.infer<typeof SalesSummaryInputSchema>;
 
-export const SalesSummaryOutputSchema = z.object({
+const SalesSummaryOutputSchema = z.object({
   summary: z.string().describe('A concise, insightful summary of the sales data in 2-4 sentences, written in a friendly and encouraging tone. This should be a high-level overview.'),
   highlights: z.array(z.string()).describe('A list of 3-4 bullet points highlighting key observations, such as top performers, peak hours, or interesting trends.'),
   recommendations: z.array(z.string()).describe('A list of 2-3 actionable and specific recommendations based on the data to help improve sales performance.'),
