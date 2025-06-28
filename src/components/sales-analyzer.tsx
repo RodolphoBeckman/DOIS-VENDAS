@@ -280,7 +280,7 @@ export default function SalesAnalyzer() {
   }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const activeData = useMemo(() => {
-    const filesToProcess = filterDateRange?.from
+    const attendanceFilesToProcess = filterDateRange?.from
       ? loadedAttendanceFiles.filter(file => {
           const fileInterval = { start: file.dateRange.start, end: file.dateRange.end };
           const filterInterval = { start: startOfDay(filterDateRange.from!), end: endOfDay(filterDateRange.to ?? filterDateRange.from!) };
@@ -289,45 +289,43 @@ export default function SalesAnalyzer() {
         })
       : loadedAttendanceFiles;
 
-    const salesFilesToProcess = loadedSalesFiles; // Por enquanto, consideramos todos os arquivos de vendas
+    const salesFilesToProcess = loadedSalesFiles; // Sales files are not filtered by date for now
 
-    if (filesToProcess.length === 0) return { consolidatedData: [], combinedAttendanceCsv: '', combinedSalesCsv: '', displayDateRange: 'Nenhum dado para o período' };
+    if (attendanceFilesToProcess.length === 0 && salesFilesToProcess.length === 0) {
+        return { consolidatedData: [], combinedAttendanceCsv: '', combinedSalesCsv: '', displayDateRange: 'Nenhum dado para o período' };
+    }
     
-    const mergedPerformances = mergeAttendanceData(filesToProcess.map(f => f.parsedData));
+    const mergedPerformances = mergeAttendanceData(attendanceFilesToProcess.map(f => f.parsedData));
     const mergedSales = mergeSalesData(salesFilesToProcess.map(f => f.parsedData));
     
-    // Consolidate data
-    const consolidatedMap = new Map<string, ConsolidatedData>();
-    mergedPerformances.forEach(perf => {
-        consolidatedMap.set(perf.salesperson, {
-            ...perf,
-            salesCount: 0,
-            totalRevenue: 0,
-            averageTicket: 0,
-            itemsPerSale: 0,
-            conversionRate: 0,
-        });
-    });
+    const allSalespeople = [...new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)])];
 
-    mergedSales.forEach(sale => {
-        const existing = consolidatedMap.get(sale.salesperson) || {
-            salesperson: sale.salesperson, hourly: [], totalAttendances: 0, totalPotentials: 0
+    const consolidatedData: ConsolidatedData[] = allSalespeople.map(name => {
+        const performanceData = mergedPerformances.find(p => p.salesperson === name);
+        const salesData = mergedSales.find(s => s.salesperson === name);
+
+        const totalAttendances = performanceData?.totalAttendances ?? 0;
+        const salesCount = salesData?.salesCount ?? 0;
+        
+        return {
+            salesperson: name,
+            hourly: performanceData?.hourly ?? [],
+            totalAttendances: totalAttendances,
+            totalPotentials: performanceData?.totalPotentials ?? 0,
+            salesCount: salesCount,
+            totalRevenue: salesData?.totalRevenue ?? 0,
+            averageTicket: salesData?.averageTicket ?? 0,
+            itemsPerSale: salesData?.itemsPerSale ?? 0,
+            conversionRate: totalAttendances > 0 ? (salesCount / totalAttendances) : 0,
         };
-        consolidatedMap.set(sale.salesperson, {
-            ...existing,
-            ...sale,
-            conversionRate: existing.totalAttendances > 0 ? (sale.salesCount / existing.totalAttendances) : 0,
-        });
     });
-
-    const consolidatedData = Array.from(consolidatedMap.values());
     
-    const combinedAttendanceCsv = filesToProcess.map(f => f.content).join('\n\n');
+    const combinedAttendanceCsv = attendanceFilesToProcess.map(f => f.content).join('\n\n');
     const combinedSalesCsv = salesFilesToProcess.map(f => f.content).join('\n\n');
 
-    const dateRanges = filesToProcess.map(f => f.content.split('\n')[0].trim());
+    const dateRanges = attendanceFilesToProcess.map(f => f.content.split('\n')[0].trim());
     const uniqueDateRanges = [...new Set(dateRanges)];
-    const displayDateRange = uniqueDateRanges.join(' & ');
+    const displayDateRange = uniqueDateRanges.join(' & ') || 'Todos os Períodos Carregados';
 
     return { consolidatedData, combinedAttendanceCsv, combinedSalesCsv, displayDateRange };
 
@@ -462,7 +460,7 @@ export default function SalesAnalyzer() {
       
       <main className="container mx-auto p-4 md:p-6 space-y-6">
         {isLoading && (<div className="flex items-center justify-center text-primary"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivo...</span></div>)}
-        {loadedAttendanceFiles.length === 0 && !isLoading && (
+        {(loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0) && !isLoading && (
             <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit"><HelpCircle className="w-10 h-10 text-primary" /></div>
@@ -471,7 +469,7 @@ export default function SalesAnalyzer() {
                 </CardHeader>
             </Card>
         )}
-        {loadedAttendanceFiles.length > 0 && (
+        {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
         <div className="animate-in fade-in-50">
             <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6">
                 <div className="flex-1">
@@ -545,6 +543,18 @@ export default function SalesAnalyzer() {
                             </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de vendas (PDV)</span> para habilitar a análise de conversão e os insights completos da IA.</p>
+                            </CardContent>
+                        </Card>
+                     )}
+                     {!aiSummary && !isAiLoading && loadedAttendanceFiles.length === 0 && loadedSalesFiles.length > 0 && (
+                        <Card className="animate-in fade-in-50 sticky top-24">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 font-headline">
+                                    <Users className="h-6 w-6 text-amber-500" />Próximo Passo
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-muted-foreground">Você carregou os dados de vendas. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
                         </Card>
                      )}
