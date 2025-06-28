@@ -2,28 +2,37 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, BarChart, User, Clock, X, FileText, Loader2 } from 'lucide-react';
+import { UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar, X, FileText, Loader2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
-type Sale = {
-  id: string;
-  salesperson: string;
+type HourlyData = {
   hour: number;
+  attendances: number;
+  potentials: number;
+};
+
+type SalespersonPerformance = {
+  salesperson: string;
+  hourly: HourlyData[];
+  totalAttendances: number;
+  totalPotentials: number;
 };
 
 export default function SalesAnalyzer() {
-  const [data, setData] = useState<Sale[]>([]);
+  const [data, setData] = useState<SalespersonPerformance[]>([]);
+  const [dateRange, setDateRange] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(Date.now());
   const { toast } = useToast();
 
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
-  const [selectedHour, setSelectedHour] = useState<string>('all');
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -35,37 +44,103 @@ export default function SalesAnalyzer() {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const lines = text.split('\n');
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
         
-        // Check for header
-        const header = lines[0].trim().toLowerCase();
-        if (header !== 'vendedora,hora' && header !== 'salesperson,hour') {
-            throw new Error("Invalid header. Expected 'vendedora,hora' or 'salesperson,hour'.");
+        if (lines.length < 4) {
+          throw new Error("Invalid file format. Expected at least a date range, two header rows, and one data row.");
+        }
+        
+        setDateRange(lines[0]);
+
+        const rawHourHeaders = lines[1].split(',');
+        let lastHourHeader = '';
+        const hourHeaders = rawHourHeaders.map(h => {
+            const trimmed = h.trim();
+            if (trimmed) {
+                lastHourHeader = trimmed;
+                return trimmed;
+            }
+            return lastHourHeader;
+        });
+
+        const metricHeaders = lines[2].split(',').map(h => h.trim().toLowerCase());
+
+        if (!metricHeaders[0].startsWith('vendedor')) {
+          throw new Error("Invalid header format. First column of second header row must be 'Vendedor'.");
         }
 
-        const parsedData: Sale[] = lines
-          .slice(1)
-          .map((line, index) => {
-            if (line.trim() === '') return null;
-            const [salesperson, hourStr] = line.split(',');
-            if (salesperson && hourStr) {
-              const hour = parseInt(hourStr.trim(), 10);
-              if (!isNaN(hour) && hour >= 0 && hour <= 23) {
-                return { id: `sale-${index}-${Math.random()}`, salesperson: salesperson.trim(), hour };
-              }
-            }
-            return null;
-          })
-          .filter((item): item is Sale => item !== null);
+        const columns: Array<{ hour: number, type: 'attendances' | 'potentials' } | null> = [];
+        for (let i = 1; i < hourHeaders.length; i++) {
+          const hourHeader = hourHeaders[i];
+          const metricHeader = metricHeaders[i];
+          
+          if (hourHeader.toLowerCase().includes('total')) {
+            columns.push(null);
+            continue;
+          }
+
+          const hourMatch = hourHeader.match(/(\d{2})h/);
+          if (!hourMatch) {
+            columns.push(null);
+            continue;
+          }
+          
+          const hour = parseInt(hourMatch[1], 10);
+          if (metricHeader === 'at.') {
+            columns.push({ hour, type: 'attendances' });
+          } else if (metricHeader === 'pot.') {
+            columns.push({ hour, type: 'potentials' });
+          } else {
+            columns.push(null);
+          }
+        }
+        
+        const dataRows = lines.slice(3);
+        const parsedData: SalespersonPerformance[] = [];
+
+        for (const row of dataRows) {
+          const values = row.split(',').map(v => v.trim());
+          const salesperson = values[0];
+          if (salesperson.toLowerCase() === 'total' || !salesperson) continue;
+
+          const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
+
+          for(let i = 1; i < values.length; i++) {
+            if (i > columns.length) continue;
+            const columnInfo = columns[i-1];
+            if (!columnInfo || !values[i]) continue;
+
+            const value = parseInt(values[i], 10);
+            if (isNaN(value)) continue;
+
+            const { hour, type } = columnInfo;
+
+            const current = hourlyMap.get(hour) || { attendances: 0, potentials: 0 };
+            current[type] += value;
+            hourlyMap.set(hour, current);
+          }
+
+          const hourly = Array.from(hourlyMap.entries()).map(([hour, data]) => ({ hour, ...data })).sort((a,b) => a.hour - b.hour);
+          const totalAttendances = hourly.reduce((sum, h) => sum + h.attendances, 0);
+          const totalPotentials = hourly.reduce((sum, h) => sum + h.potentials, 0);
+
+          parsedData.push({
+            salesperson,
+            hourly,
+            totalAttendances,
+            totalPotentials
+          });
+        }
         
         if (parsedData.length === 0) {
             throw new Error("No valid data found in the file.");
         }
 
         setData(parsedData);
+        setSelectedSalesperson('all');
         toast({
           title: "File Uploaded Successfully",
-          description: `Found ${parsedData.length} sales records.`,
+          description: `Found data for ${parsedData.length} salespeople.`,
         });
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "An unknown error occurred during parsing.";
@@ -87,32 +162,43 @@ export default function SalesAnalyzer() {
         description: "Could not read the selected file.",
       });
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   }, [toast]);
 
   const resetData = useCallback(() => {
     setData([]);
+    setDateRange("");
     setSelectedSalesperson('all');
-    setSelectedHour('all');
     setFileInputKey(Date.now());
   }, []);
 
-  const uniqueSalespeople = useMemo(() => ['all', ...Array.from(new Set(data.map(d => d.salesperson)))], [data]);
-  const uniqueHours = useMemo(() => ['all', ...Array.from(new Set(data.map(d => d.hour))).sort((a,b) => a-b)], [data]);
+  const uniqueSalespeople = useMemo(() => ['all', ...data.map(d => d.salesperson).sort()], [data]);
 
   const filteredData = useMemo(() => {
-    return data.filter(d => 
-      (selectedSalesperson === 'all' || d.salesperson === selectedSalesperson) &&
-      (selectedHour === 'all' || d.hour === parseInt(selectedHour, 10))
-    );
-  }, [data, selectedSalesperson, selectedHour]);
+    if (selectedSalesperson === 'all') return data;
+    return data.filter(d => d.salesperson === selectedSalesperson);
+  }, [data, selectedSalesperson]);
   
-  const aggregatedData = useMemo(() => {
-    const counts: { [key: string]: number } = {};
-    filteredData.forEach(sale => {
-      counts[sale.salesperson] = (counts[sale.salesperson] || 0) + 1;
+  const totalAttendances = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalAttendances, 0), [filteredData]);
+  const totalPotentials = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalPotentials, 0), [filteredData]);
+
+  const hourlyTotals = useMemo(() => {
+    const totals = new Map<number, { attendances: number, potentials: number }>();
+    filteredData.forEach(person => {
+        person.hourly.forEach(h => {
+            const current = totals.get(h.hour) || { attendances: 0, potentials: 0 };
+            current.attendances += h.attendances;
+            current.potentials += h.potentials;
+            totals.set(h.hour, current);
+        });
     });
-    return Object.entries(counts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+    return Array.from(totals.entries())
+        .map(([hour, data]) => ({
+            name: `${String(hour).padStart(2, '0')}:00`,
+            attendances: data.attendances,
+            potentials: data.potentials,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredData]);
 
   if (data.length === 0) {
@@ -124,7 +210,7 @@ export default function SalesAnalyzer() {
               <FileText className="w-10 h-10 text-primary" />
             </div>
             <CardTitle className="font-headline text-4xl mt-4">Sales Insights Analyzer</CardTitle>
-            <CardDescription className="text-lg">Upload your CSV file to get started</CardDescription>
+            <CardDescription className="text-lg">Upload your daily sales summary CSV to get started</CardDescription>
           </CardHeader>
           <CardContent>
             <label htmlFor="file-upload" className="cursor-pointer group">
@@ -133,7 +219,7 @@ export default function SalesAnalyzer() {
                 <p className="mt-4 text-base text-muted-foreground">
                   <span className="font-semibold text-primary">Click to upload</span> or drag and drop
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">CSV file with 'vendedora,hora' columns</p>
+                <p className="text-xs text-muted-foreground mt-1">CSV file with sales summary</p>
               </div>
               <input key={fileInputKey} id="file-upload" type="file" className="hidden" accept=".csv" onChange={handleFileUpload} disabled={isLoading} />
             </label>
@@ -150,11 +236,11 @@ export default function SalesAnalyzer() {
   }
 
   return (
-    <div className="min-h-screen animate-in fade-in-50">
+    <div className="min-h-screen bg-muted/20 animate-in fade-in-50">
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b">
         <div className="container mx-auto flex items-center justify-between p-4">
           <h1 className="font-headline text-2xl flex items-center gap-2">
-            <BarChart className="text-primary" />
+            <BarChartIcon className="text-primary" />
             <span>Sales Insights</span>
           </h1>
           <Button variant="outline" size="sm" onClick={resetData}>
@@ -163,96 +249,112 @@ export default function SalesAnalyzer() {
         </div>
       </header>
       
-      <main className="container mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <main className="container mx-auto p-4 space-y-6">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between">
+            <div className="flex-1">
+                <Label htmlFor="salesperson-filter">Filter by Salesperson</Label>
+                <Select onValueChange={setSelectedSalesperson} value={selectedSalesperson}>
+                    <SelectTrigger id="salesperson-filter" className="w-full sm:w-[250px]">
+                    <SelectValue placeholder="Select a salesperson" />
+                    </SelectTrigger>
+                    <SelectContent>
+                    {uniqueSalespeople.map(person => <SelectItem key={person} value={person}>{person === 'all' ? 'All Salespeople' : person}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
-                <CardHeader className="flex-row items-center justify-between">
-                    <div>
-                        <CardTitle className="font-headline">Sales Data</CardTitle>
-                        <CardDescription>
-                            Showing {filteredData.length} of {data.length} records.
-                        </CardDescription>
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Attendances</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <ScrollArea className="h-[60vh] w-full">
-                    <Table>
-                        <TableHeader className="sticky top-0 bg-background">
-                        <TableRow>
-                            <TableHead>Salesperson</TableHead>
-                            <TableHead className="text-right">Hour of Attendance</TableHead>
-                        </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                        {filteredData.length > 0 ? filteredData.map(sale => (
-                            <TableRow key={sale.id}>
-                            <TableCell className="font-medium">{sale.salesperson}</TableCell>
-                            <TableCell className="text-right">{String(sale.hour).padStart(2, '0')}:00</TableCell>
-                            </TableRow>
-                        )) : (
-                            <TableRow>
-                                <TableCell colSpan={2} className="h-24 text-center">No results found for the selected filters.</TableCell>
-                            </TableRow>
-                        )}
-                        </TableBody>
-                    </Table>
+                    <div className="text-2xl font-bold">{totalAttendances}</div>
+                    <p className="text-xs text-muted-foreground">in the selected period/person</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Potentials</CardTitle>
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{totalPotentials}</div>
+                    <p className="text-xs text-muted-foreground">new potential clients</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Date Range</CardTitle>
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-xl font-bold">{dateRange}</div>
+                    <p className="text-xs text-muted-foreground">Period from the uploaded file</p>
+                </CardContent>
+            </Card>
+        </div>
+        
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+            <Card className="lg:col-span-4">
+                <CardHeader>
+                    <CardTitle className="font-headline">Hourly Performance</CardTitle>
+                    <CardDescription>Attendances vs Potentials throughout the day.</CardDescription>
+                </CardHeader>
+                <CardContent className="pl-2">
+                    <ChartContainer config={{
+                      attendances: { label: 'Attendances', color: 'hsl(var(--primary))' },
+                      potentials: { label: 'Potentials', color: 'hsl(var(--accent))' },
+                    }} className="h-[300px] w-full">
+                        <BarChart data={hourlyTotals} accessibilityLayer>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} />
+                        <YAxis />
+                        <Tooltip cursor={{fill: 'hsl(var(--muted))'}} content={<ChartTooltipContent />} />
+                        <Legend />
+                        <Bar dataKey="attendances" fill="var(--color-attendances)" radius={4} />
+                        <Bar dataKey="potentials" fill="var(--color-potentials)" radius={4} />
+                        </BarChart>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
+            <Card className="lg:col-span-3">
+                <CardHeader>
+                    <CardTitle className="font-headline">Salespeople Ranking</CardTitle>
+                    <CardDescription>Based on total attendances.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-[300px]">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                <TableHead>Salesperson</TableHead>
+                                <TableHead className="text-right">Attendances</TableHead>
+                                <TableHead className="text-right">Potentials</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredData.length > 0 ? filteredData
+                                .sort((a,b) => b.totalAttendances - a.totalAttendances)
+                                .map(item => (
+                                    <TableRow key={item.salesperson}>
+                                        <TableCell className="font-medium">{item.salesperson}</TableCell>
+                                        <TableCell className="text-right font-bold text-primary">{item.totalAttendances}</TableCell>
+                                        <TableCell className="text-right font-bold text-accent">{item.totalPotentials}</TableCell>
+                                    </TableRow>
+                                )) : (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="h-24 text-center">No data for this selection.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     </ScrollArea>
                 </CardContent>
             </Card>
         </div>
-
-        <aside className="space-y-6 lg:sticky lg:top-20 self-start">
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-headline">Filters</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="salesperson-filter">Salesperson</Label>
-                <Select onValueChange={setSelectedSalesperson} value={selectedSalesperson}>
-                  <SelectTrigger id="salesperson-filter">
-                    <SelectValue placeholder="Select a salesperson" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueSalespeople.map(person => <SelectItem key={person} value={person}>{person === 'all' ? 'All Salespeople' : person}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="hour-filter">Hour</Label>
-                <Select onValueChange={setSelectedHour} value={selectedHour}>
-                  <SelectTrigger id="hour-filter">
-                    <SelectValue placeholder="Select an hour" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uniqueHours.map(hour => <SelectItem key={String(hour)} value={String(hour)}>{hour === 'all' ? 'All Hours' : `${String(hour).padStart(2, '0')}:00`}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-headline">Summary</CardTitle>
-              <CardDescription>Attendances for selection</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-60">
-                <div className="space-y-4 pr-4">
-                    {aggregatedData.length > 0 ? aggregatedData.map(item => (
-                    <div key={item.name} className="flex items-center justify-between animate-in fade-in-50">
-                        <p className="flex items-center gap-2 text-sm font-medium"><User className="h-4 w-4 text-muted-foreground" /> {item.name}</p>
-                        <p className="font-bold text-lg text-primary">{item.count}</p>
-                    </div>
-                    )) : (
-                         <p className="text-sm text-muted-foreground text-center py-10">No summary for this selection.</p>
-                    )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </aside>
       </main>
     </div>
   );
