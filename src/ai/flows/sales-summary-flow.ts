@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Um fluxo de IA para analisar e resumir dados de vendas e atendimentos de CSVs.
@@ -75,13 +76,23 @@ Use a tabela a seguir como referência para classificar o desempenho da taxa de 
 
 Com base nesta análise aprofundada, forneça um resumo conciso, destaques principais e recomendações que ajudem a direcionar treinamentos e estratégias de vendas.
 
-**Para os Destaques Individuais, siga estas regras RIGOROSAMENTE para garantir a precisão:**
-1.  **Verifique os Fatos**: Antes de afirmar que um(a) vendedor(a) é "o(a) melhor" ou "líder" em qualquer métrica (Taxa de Conversão, Receita, Ticket Médio, etc.), compare seu valor com o de TODOS os outros para ter certeza absoluta de que a afirmação é verdadeira e factual. A precisão é a maior prioridade.
-2.  **Seja Específico e Baseado em Dados**: Baseie cada destaque em uma métrica clara dos dados.
-    -   Exemplo de ponto forte: "Maria se destaca como líder em taxa de conversão (75%)."
-    -   Exemplo de oportunidade: "A taxa de conversão de João (25%) é uma área de oportunidade, considerando seu alto volume de atendimentos."
-3.  **Evite Generalizações**: Não faça afirmações vagas. A análise deve ser puramente factual, baseada nos dados CSV fornecidos.
-4.  **Crie um Destaque para CADA Vendedor(a)**: Para cada vendedor(a) nos dados, escreva uma única frase que resuma seu principal ponto forte ou a oportunidade de melhoria mais clara, seguindo as regras acima. Preencha o campo 'individualHighlights' com estes destaques.
+**Para os Destaques Individuais, siga estas regras CRÍTICAS E OBRIGATÓRIAS para garantir 100% de precisão:**
+
+1.  **PRECISÃO ACIMA DE TUDO. NÃO FAÇA AFIRMAÇÕES FALSAS.**
+    -   Antes de declarar um vendedor(a) como "líder" ou "o(a) melhor" em qualquer métrica (Taxa de Conversão, Receita, Atendimentos, Ticket Médio, etc.), você **DEVE** comparar o valor dele(a) com o de **TODOS** os outros vendedores nos dados.
+    -   A afirmação só pode ser feita se for **matematicamente e factualmente verdadeira**.
+    -   **Exemplo de verificação:** Para dizer que "Carol tem a maior taxa de conversão", você precisa confirmar que a taxa dela é maior que a de todos os outros. Se não for, a afirmação é **FALSA** e não pode ser feita.
+
+2.  **SEJA ESPECÍFICO E BASEADO EM DADOS.**
+    -   Cada destaque deve se basear em uma métrica clara e em um valor numérico presente ou derivado dos dados.
+    -   **Exemplo CORRETO (se for verdade):** "Carol se destaca como líder absoluta em taxa de conversão (93.1%), mostrando altíssima eficiência."
+    -   **Exemplo CORRETO de oportunidade:** "A taxa de conversão de Adriana Felix (61.2%) é uma área clara para desenvolvimento, especialmente considerando seu alto volume de atendimentos."
+    -   **Exemplo INCORRETO (generalização):** "Adriana Felix foi muito bem."
+
+3.  **DESTAQUE ÚNICO E RELEVANTE PARA CADA VENDEDOR(A).**
+    -   Crie exatamente um destaque para **CADA** vendedor(a) presente nos dados.
+    -   Se um vendedor(a) não for o número 1 em nenhuma métrica principal, encontre seu ponto forte mais relevante (ex: "Possui o segundo maior Ticket Médio") ou aponte a oportunidade de melhoria mais impactante.
+    -   Preencha o campo 'individualHighlights' com estes destaques.
 
 Aqui estão os dados de ATENDIMENTO:
 \`\`\`csv
