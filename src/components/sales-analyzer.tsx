@@ -262,7 +262,7 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
 };
 
 
-const SalesAnalyzer = () => {
+function SalesAnalyzer() {
   const [loadedAttendanceFiles, setLoadedAttendanceFiles] = useState<LoadedAttendanceFile[]>([]);
   const [loadedSalesFiles, setLoadedSalesFiles] = useState<LoadedSalesFile[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -486,6 +486,10 @@ const SalesAnalyzer = () => {
     return consolidatedData.filter(d => d.salesperson === selectedSalesperson);
   }, [consolidatedData, selectedSalesperson]);
   
+  const sortedDisplayData = useMemo(() => {
+    return [...displayData].sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [displayData]);
+  
   const totalAttendances = useMemo(() => displayData.reduce((sum, p) => sum + p.totalAttendances, 0), [displayData]);
   const totalSalesCount = useMemo(() => displayData.reduce((sum, p) => sum + p.salesCount, 0), [displayData]);
   const totalRevenue = useMemo(() => displayData.reduce((sum, p) => sum + p.totalRevenue, 0), [displayData]);
@@ -595,7 +599,7 @@ const SalesAnalyzer = () => {
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit"><HelpCircle className="w-10 h-10 text-primary" /></div>
                     <CardTitle className="font-headline text-3xl mt-4">Bem-vindo ao Analisador de Vendas</CardTitle>
-                    <CardDescription className="text-md text-muted-foreground max-w-xl mx-auto">Para começar, clique em <span className="font-semibold text-primary">"Configurar e Importar"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
+                    <CardDescription>Para começar, clique em <span className="font-semibold text-primary">"Configurar e Importar"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
                 </CardHeader>
             </Card>
         )}
@@ -659,7 +663,7 @@ const SalesAnalyzer = () => {
                                 <Table>
                                     <TableHeader><TableRow><TableHead>Vendedor(a)</TableHead><TableHead className="text-right">Atend.</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead className="text-right">Conversão</TableHead><TableHead className="text-right">Receita</TableHead><TableHead className="text-right">Ticket Médio</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {displayData.length > 0 ? [...displayData].sort((a,b) => b.totalRevenue - a.totalRevenue).map(item => (
+                                        {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
                                             <TableRow key={item.salesperson}>
                                                 <TableCell className="font-medium">{item.salesperson}</TableCell>
                                                 <TableCell className="text-right">{item.totalAttendances}</TableCell>
@@ -694,7 +698,7 @@ const SalesAnalyzer = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <DollarSign className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </Title>
+                                </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de vendas (PDV)</span> para habilitar a análise de conversão e os insights completos da IA.</p>
@@ -706,7 +710,7 @@ const SalesAnalyzer = () => {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <Users className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </Title>
+                                </CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
