@@ -10,7 +10,7 @@ import { parse as parseDate, isWithinInterval, startOfDay, endOfDay } from 'date
 import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-summary-flow';
 import { useToast } from "@/hooks/use-toast";
 import { 
-    UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, Zap, 
+    UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
     TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -433,6 +433,18 @@ export default function SalesAnalyzer() {
         .map(([hour, data]) => ({ name: `${String(hour).padStart(2, '0')}:00`, atendimentos: data.attendances, potenciais: data.potentials }))
         .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredDataBySalesperson]);
+
+  const performanceBySalespersonChartData = useMemo(() => {
+    return filteredDataBySalesperson
+      .filter(item => item.totalAttendances > 0 || item.salesCount > 0)
+      .map(item => ({
+        name: item.salesperson.split(' ')[0],
+        atendimentos: item.totalAttendances,
+        vendas: item.salesCount,
+        receita: item.totalRevenue,
+      }))
+      .sort((a, b) => b.receita - a.receita);
+  }, [filteredDataBySalesperson]);
   
   return (
     <div className="min-h-screen animate-in fade-in-50 bg-secondary/50">
@@ -534,6 +546,31 @@ export default function SalesAnalyzer() {
                         <CardContent className="pl-2">
                             <ChartContainer config={{ atendimentos: { label: 'Atendimentos', color: 'hsl(var(--chart-1))' }, potenciais: { label: 'Potenciais', color: 'hsl(var(--chart-2))' }, }} className="h-[300px] w-full">
                                 <BarChart data={hourlyTotals} accessibilityLayer><CartesianGrid vertical={false} /><XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} fontSize={12} /><YAxis tickLine={false} axisLine={false} fontSize={12} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} content={<ChartTooltipContent />} /><Legend /><Bar dataKey="atendimentos" fill="var(--color-atendimentos)" radius={[4, 4, 0, 0]} /><Bar dataKey="potenciais" fill="var(--color-potenciais)" radius={[4, 4, 0, 0]} /></BarChart>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="font-headline flex items-center gap-2">
+                                <Target className="h-5 w-5 text-accent" />
+                                Atendimentos vs. Vendas por Vendedor
+                            </CardTitle>
+                            <CardDescription>Comparativo de esforço (atendimentos) e resultado (vendas).</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pl-2">
+                            <ChartContainer config={{
+                                atendimentos: { label: 'Atendimentos', color: 'hsl(var(--chart-1))' },
+                                vendas: { label: 'Vendas', color: 'hsl(var(--chart-2))' },
+                            }} className="h-[300px] w-full">
+                                <BarChart data={performanceBySalespersonChartData} accessibilityLayer>
+                                    <CartesianGrid vertical={false} />
+                                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} fontSize={12} />
+                                    <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                                    <Tooltip cursor={{fill: 'hsl(var(--muted))'}} content={<ChartTooltipContent />} />
+                                    <Legend />
+                                    <Bar dataKey="atendimentos" fill="var(--color-atendimentos)" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="vendas" fill="var(--color-vendas)" radius={[4, 4, 0, 0]} />
+                                </BarChart>
                             </ChartContainer>
                         </CardContent>
                     </Card>
