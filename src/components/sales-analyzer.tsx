@@ -52,7 +52,7 @@ export default function SalesAnalyzer() {
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
         
         if (lines.length < 4) {
-          throw new Error("Invalid file format. Expected at least a date range, two header rows, and one data row.");
+          throw new Error("Formato de arquivo inválido. É esperado ao menos um período, duas linhas de cabeçalho e uma linha de dados.");
         }
         
         setDateRange(lines[0]);
@@ -71,7 +71,7 @@ export default function SalesAnalyzer() {
         const metricHeaders = lines[2].split(',').map(h => h.trim().toLowerCase());
 
         if (!metricHeaders[0].startsWith('vendedor')) {
-          throw new Error("Invalid header format. First column of second header row must be 'Vendedor'.");
+          throw new Error("Formato de cabeçalho inválido. A primeira coluna da segunda linha de cabeçalho deve ser 'Vendedor'.");
         }
 
         const columns: Array<{ hour: number, type: 'attendances' | 'potentials' } | null> = [];
@@ -138,14 +138,14 @@ export default function SalesAnalyzer() {
         }
         
         if (parsedData.length === 0) {
-            throw new Error("No valid data found in the file.");
+            throw new Error("Nenhum dado válido encontrado no arquivo.");
         }
 
         setData(parsedData);
         setSelectedSalesperson('all');
         toast({
-          title: "File Uploaded Successfully",
-          description: `Found data for ${parsedData.length} salespeople. Generating AI insights...`,
+          title: "Arquivo Carregado com Sucesso",
+          description: `Encontrados dados para ${parsedData.length} vendedores. Gerando insights de IA...`,
         });
 
         setIsAiLoading(true);
@@ -155,21 +155,21 @@ export default function SalesAnalyzer() {
             setAiSummary(summary);
           })
           .catch(aiError => {
-            console.error("AI analysis failed:", aiError);
+            console.error("Falha na análise de IA:", aiError);
             toast({
               variant: "destructive",
-              title: "AI Analysis Failed",
-              description: "The AI could not generate insights for this data.",
+              title: "Falha na Análise de IA",
+              description: "A IA não conseguiu gerar insights para estes dados.",
             });
           })
           .finally(() => {
             setIsAiLoading(false);
           });
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "An unknown error occurred during parsing.";
+        const errorMsg = err instanceof Error ? err.message : "Ocorreu um erro desconhecido durante o processamento.";
         toast({
           variant: "destructive",
-          title: "Upload Failed",
+          title: "Falha no Upload",
           description: errorMsg,
         });
         setData([]);
@@ -181,8 +181,8 @@ export default function SalesAnalyzer() {
       setIsLoading(false);
       toast({
         variant: "destructive",
-        title: "File Read Error",
-        description: "Could not read the selected file.",
+        title: "Erro de Leitura de Arquivo",
+        description: "Não foi possível ler o arquivo selecionado.",
       });
     };
     reader.readAsText(file, 'UTF-8');
@@ -234,24 +234,24 @@ export default function SalesAnalyzer() {
             <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit">
               <FileText className="w-10 h-10 text-primary" />
             </div>
-            <CardTitle className="font-headline text-4xl mt-4">Sales Insights Analyzer</CardTitle>
-            <CardDescription className="text-lg">Get AI-powered insights from your daily sales summary CSV</CardDescription>
+            <CardTitle className="font-headline text-4xl mt-4">Analisador de Insights de Vendas</CardTitle>
+            <CardDescription className="text-lg">Obtenha insights com IA do seu resumo diário de vendas em CSV</CardDescription>
           </CardHeader>
           <CardContent>
             <label htmlFor="file-upload" className="cursor-pointer group">
               <div className="border-2 border-dashed border-border rounded-lg p-10 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors duration-300">
                 <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
                 <p className="mt-4 text-base text-muted-foreground">
-                  <span className="font-semibold text-primary">Click to upload</span> or drag and drop
+                  <span className="font-semibold text-primary">Clique para carregar</span> ou arraste e solte
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">CSV file with sales summary</p>
+                <p className="text-xs text-muted-foreground mt-1">Arquivo CSV com resumo de vendas</p>
               </div>
               <input key={fileInputKey} id="file-upload" type="file" className="hidden" accept=".csv" onChange={handleFileUpload} disabled={isLoading} />
             </label>
             {isLoading && (
               <div className="mt-4 flex items-center justify-center text-primary">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                <span>Processing...</span>
+                <span>Processando...</span>
               </div>
             )}
           </CardContent>
@@ -266,10 +266,10 @@ export default function SalesAnalyzer() {
         <div className="container mx-auto flex items-center justify-between p-4">
           <h1 className="font-headline text-2xl flex items-center gap-2">
             <BarChartIcon className="text-primary" />
-            <span>Sales Insights</span>
+            <span>Insights de Vendas</span>
           </h1>
           <Button variant="outline" size="sm" onClick={resetData}>
-            <X className="mr-2 h-4 w-4" /> Upload New File
+            <X className="mr-2 h-4 w-4" /> Carregar Novo Arquivo
           </Button>
         </div>
       </header>
@@ -277,13 +277,13 @@ export default function SalesAnalyzer() {
       <main className="container mx-auto p-4 space-y-6">
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
             <div className="flex-1">
-                <Label htmlFor="salesperson-filter">Filter by Salesperson</Label>
+                <Label htmlFor="salesperson-filter">Filtrar por Vendedor(a)</Label>
                 <Select onValueChange={setSelectedSalesperson} value={selectedSalesperson}>
                     <SelectTrigger id="salesperson-filter" className="w-full sm:w-[250px]">
-                    <SelectValue placeholder="Select a salesperson" />
+                    <SelectValue placeholder="Selecione um(a) vendedor(a)" />
                     </SelectTrigger>
                     <SelectContent>
-                    {uniqueSalespeople.map(person => <SelectItem key={person} value={person}>{person === 'all' ? 'All Salespeople' : person}</SelectItem>)}
+                    {uniqueSalespeople.map(person => <SelectItem key={person} value={person}>{person === 'all' ? 'Todos os Vendedores' : person}</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
@@ -292,42 +292,42 @@ export default function SalesAnalyzer() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Attendances</CardTitle>
+                    <CardTitle className="text-sm font-medium">Total de Atendimentos</CardTitle>
                     <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold">{totalAttendances}</div>
-                    <p className="text-xs text-muted-foreground">in the selected period/person</p>
+                    <p className="text-xs text-muted-foreground">no período/pessoa selecionado(a)</p>
                 </CardContent>
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Potentials</CardTitle>
+                    <CardTitle className="text-sm font-medium">Total de Potenciais</CardTitle>
                     <Target className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold">{totalPotentials}</div>
-                    <p className="text-xs text-muted-foreground">new potential clients</p>
+                    <p className="text-xs text-muted-foreground">novos clientes em potencial</p>
                 </CardContent>
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Opportunity Ratio</CardTitle>
+                    <CardTitle className="text-sm font-medium">Taxa de Oportunidade</CardTitle>
                     <Zap className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                     <div className="text-2xl font-bold">{opportunityRatio.toFixed(2)}</div>
-                    <p className="text-xs text-muted-foreground">Opportunities per attendance</p>
+                    <p className="text-xs text-muted-foreground">Oportunidades por atendimento</p>
                 </CardContent>
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Date Range</CardTitle>
+                    <CardTitle className="text-sm font-medium">Período</CardTitle>
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                     <div className="text-xl font-bold">{dateRange}</div>
-                    <p className="text-xs text-muted-foreground">Period from the uploaded file</p>
+                    <p className="text-xs text-muted-foreground">Período do arquivo carregado</p>
                 </CardContent>
             </Card>
         </div>
@@ -337,9 +337,9 @@ export default function SalesAnalyzer() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 font-headline">
                 <Sparkles className="h-6 w-6 text-primary" />
-                AI-Powered Insights
+                Insights com IA
               </CardTitle>
-              <CardDescription>Our AI is analyzing your data to find key trends and recommendations...</CardDescription>
+              <CardDescription>Nossa IA está analisando seus dados para encontrar tendências e recomendações...</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Skeleton className="h-4 w-full" />
@@ -358,18 +358,18 @@ export default function SalesAnalyzer() {
              <CardHeader>
                 <CardTitle className="flex items-center gap-2 font-headline">
                   <Sparkles className="h-6 w-6 text-primary" />
-                  AI-Powered Insights
+                  Insights com IA
                 </CardTitle>
              </CardHeader>
              <CardContent className="space-y-4 text-sm">
                 <p className="text-base leading-relaxed">{aiSummary.summary}</p>
                 <div className="grid md:grid-cols-2 gap-6 pt-4">
                     <div>
-                        <h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5"/>Highlights</h3>
+                        <h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5"/>Destaques</h3>
                         <ul className="list-disc pl-5 space-y-1 text-muted-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul>
                     </div>
                     <div>
-                        <h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5"/>Recommendations</h3>
+                        <h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5"/>Recomendações</h3>
                         <ul className="list-disc pl-5 space-y-1 text-muted-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul>
                     </div>
                 </div>
@@ -380,13 +380,13 @@ export default function SalesAnalyzer() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
             <Card className="lg:col-span-4">
                 <CardHeader>
-                    <CardTitle className="font-headline">Hourly Performance</CardTitle>
-                    <CardDescription>Attendances vs Potentials throughout the day.</CardDescription>
+                    <CardTitle className="font-headline">Desempenho por Hora</CardTitle>
+                    <CardDescription>Atendimentos vs Potenciais ao longo do dia.</CardDescription>
                 </CardHeader>
                 <CardContent className="pl-2">
                     <ChartContainer config={{
-                      attendances: { label: 'Attendances', color: 'hsl(var(--primary))' },
-                      potentials: { label: 'Potentials', color: 'hsl(var(--accent))' },
+                      attendances: { label: 'Atendimentos', color: 'hsl(var(--primary))' },
+                      potentials: { label: 'Potenciais', color: 'hsl(var(--accent))' },
                     }} className="h-[300px] w-full">
                         <BarChart data={hourlyTotals} accessibilityLayer>
                         <CartesianGrid vertical={false} />
@@ -402,18 +402,18 @@ export default function SalesAnalyzer() {
             </Card>
             <Card className="lg:col-span-3">
                 <CardHeader>
-                    <CardTitle className="font-headline">Salespeople Ranking</CardTitle>
-                    <CardDescription>Based on total attendances.</CardDescription>
+                    <CardTitle className="font-headline">Ranking de Vendedores</CardTitle>
+                    <CardDescription>Baseado no total de atendimentos.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ScrollArea className="h-[300px]">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                <TableHead>Salesperson</TableHead>
-                                <TableHead className="text-right">Attendances</TableHead>
-                                <TableHead className="text-right">Potentials</TableHead>
-                                <TableHead className="text-right">Opp. Ratio</TableHead>
+                                <TableHead>Vendedor(a)</TableHead>
+                                <TableHead className="text-right">Atendimentos</TableHead>
+                                <TableHead className="text-right">Potenciais</TableHead>
+                                <TableHead className="text-right">Tx. Oport.</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -428,7 +428,7 @@ export default function SalesAnalyzer() {
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">No data for this selection.</TableCell>
+                                        <TableCell colSpan={4} className="h-24 text-center">Nenhum dado para esta seleção.</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>

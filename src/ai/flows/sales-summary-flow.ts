@@ -11,15 +11,15 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 const SalesSummaryInputSchema = z.object({
-  csvData: z.string().describe('The full content of the sales data CSV file.'),
-  dateRange: z.string().describe('The date range for the provided data (e.g., "2024/01/01 - 2024/01/31").'),
+  csvData: z.string().describe('O conteúdo completo do arquivo CSV de dados de vendas.'),
+  dateRange: z.string().describe('O período dos dados fornecidos (ex: "2024/01/01 - 2024/01/31").'),
 });
 export type SalesSummaryInput = z.infer<typeof SalesSummaryInputSchema>;
 
 const SalesSummaryOutputSchema = z.object({
-  summary: z.string().describe('A concise, insightful summary of the sales data in 2-4 sentences, written in a friendly and encouraging tone. This should be a high-level overview.'),
-  highlights: z.array(z.string()).describe('A list of 3-4 bullet points highlighting key observations, such as top performers, peak hours, or interesting trends.'),
-  recommendations: z.array(z.string()).describe('A list of 2-3 actionable and specific recommendations based on the data to help improve sales performance.'),
+  summary: z.string().describe('Um resumo conciso e perspicaz dos dados de vendas em 2-4 frases, escrito em um tom amigável e encorajador. Deve ser uma visão geral de alto nível.'),
+  highlights: z.array(z.string()).describe('Uma lista de 3-4 pontos destacando observações importantes, como melhores desempenhos, horários de pico ou tendências interessantes.'),
+  recommendations: z.array(z.string()).describe('Uma lista de 2-3 recomendações acionáveis e específicas com base nos dados para ajudar a melhorar o desempenho de vendas.'),
 });
 export type SalesSummaryOutput = z.infer<typeof SalesSummaryOutputSchema>;
 
@@ -31,28 +31,28 @@ const prompt = ai.definePrompt({
   name: 'salesSummaryPrompt',
   input: { schema: SalesSummaryInputSchema },
   output: { schema: SalesSummaryOutputSchema },
-  prompt: `You are a friendly and sharp-witted sales performance analyst for a retail store.
-Your task is to analyze a daily sales report provided in a CSV format and generate a summary with highlights and recommendations.
-The data covers the period: {{{dateRange}}}.
+  prompt: `Você é um analista de desempenho de vendas amigável e perspicaz para uma loja de varejo.
+Sua tarefa é analisar um relatório diário de vendas fornecido em formato CSV e gerar um resumo com destaques e recomendações.
+Os dados cobrem o período: {{{dateRange}}}.
 
-The CSV data has the following structure:
-- The first row is the date range.
-- The second and third rows are headers.
-- Subsequent rows list salespeople and their performance per hour.
-- "At." stands for "Atendimentos" (Attendances/Services), which are direct customer interactions or sales.
-- "Pot." stands for "Potenciais" (Potentials), which are opportunities for additional sales (e.g., a person accompanying a customer).
+Os dados CSV têm a seguinte estrutura:
+- A primeira linha é o intervalo de datas.
+- A segunda e a terceira linhas são cabeçalhos.
+- As linhas subsequentes listam os vendedores e seu desempenho por hora.
+- "At." significa "Atendimentos", que são interações diretas com o cliente ou vendas.
+- "Pot." significa "Potenciais", que são oportunidades de vendas adicionais (por exemplo, uma pessoa acompanhando um cliente).
 
-Analyze the provided CSV data to identify trends, top performers, and areas for improvement.
+Analise os dados CSV fornecidos para identificar tendências, melhores desempenhos e áreas para melhoria.
 
-Key areas to analyze:
-1.  **Overall Performance**: What are the total attendances and potentials?
-2.  **Top Performers**: Who are the top 3 salespeople in terms of attendances? Who is best at generating potentials?
-3.  **Hourly Trends**: What are the peak hours for customer attendances? Are there any quiet periods?
-4.  **Opportunities**: Look at the ratio of potentials to attendances. A high number of potentials is a good sign of upselling opportunities.
+Principais áreas para analisar:
+1.  **Desempenho Geral**: Quais são os totais de atendimentos e potenciais?
+2.  **Melhores Desempenhos**: Quem são os 3 melhores vendedores em termos de atendimentos? Quem é melhor em gerar potenciais?
+3.  **Tendências Horárias**: Quais são os horários de pico para atendimentos de clientes? Existem períodos de calmaria?
+4.  **Oportunidades**: Observe a proporção de potenciais para atendimentos. Um alto número de potenciais é um bom sinal de oportunidades de upsell.
 
-Based on your analysis, provide a concise summary, a few key highlights, and actionable recommendations. The tone should be professional yet encouraging.
+Com base em sua análise, forneça um resumo conciso, alguns destaques principais e recomendações práticas. O tom deve ser profissional, mas encorajador.
 
-Here is the data:
+Aqui estão os dados:
 \`\`\`csv
 {{{csvData}}}
 \`\`\`
@@ -68,7 +68,7 @@ const salesSummaryFlow = ai.defineFlow(
   async (input) => {
     const { output } = await prompt(input);
     if (!output) {
-        throw new Error("AI failed to generate a summary.");
+        throw new Error("A IA não conseguiu gerar um resumo.");
     }
     return output;
   }
