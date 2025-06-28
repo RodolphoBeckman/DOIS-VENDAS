@@ -198,16 +198,16 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const parsedData: SalespersonSales[] = [];
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
-        if (values.length < 13) continue; // Basic validation for row length
-        const rawSalespersonName = values[2]; // 'Nome do Vendedor'
+        if (values.length < 11) continue; // Basic validation for row length
+        const rawSalespersonName = values[0]; // 'Vendedor' is at index 0
         if (rawSalespersonName?.toLowerCase() === 'total' || !rawSalespersonName) continue;
         
         parsedData.push({
             salesperson: cleanSalespersonName(rawSalespersonName),
-            salesCount: parseIntSimple(values[4]),       // 'Vendas'
-            itemsPerSale: parseFloatSimple(values[8]),   // 'PA'
-            totalRevenue: parseCurrency(values[10]),      // 'Total Vendas'
-            averageTicket: parseCurrency(values[12]),    // 'Bilhete Médio'
+            salesCount: parseIntSimple(values[2]),       // 'Vendas' is at index 2
+            itemsPerSale: parseFloatSimple(values[6]),   // 'P.A.' is at index 6
+            totalRevenue: parseCurrency(values[8]),      // 'Total Vendas' is at index 8
+            averageTicket: parseCurrency(values[10]),    // 'Ticket Médio' is at index 10
         });
     }
     if (parsedData.length === 0) throw new Error("Nenhum dado de vendas válido encontrado.");
