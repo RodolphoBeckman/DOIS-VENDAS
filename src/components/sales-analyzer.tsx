@@ -77,22 +77,51 @@ const cleanSalespersonName = (name: string): string => {
 };
 
 const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } | null => {
-    try {
-        const parts = rangeStr.split('-').map(p => p.trim());
-        if (parts.length !== 2) return null;
-        const [startStr, endStr] = parts;
-        const start = startOfDay(parseDate(startStr, 'yyyy/MM/dd', new Date()));
-        const end = endOfDay(parseDate(endStr, 'yyyy/MM/dd', new Date()));
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
-        return { start, end };
-    } catch (e) {
-        console.error("Erro ao parsear o período:", e);
+    const tryParseDate = (dateString: string): Date | null => {
+        // Common date formats for Brazil and others
+        const formats = ['dd/MM/yyyy', 'yyyy/MM/dd', 'dd-MM-yyyy', 'yyyy-MM-dd'];
+        for (const format of formats) {
+            const date = parseDate(dateString.trim(), format, new Date());
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
+        }
         return null;
+    };
+
+    // 1. Try regex for "date1 any_separator date2"
+    const rangeRegex = /(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})[^0-9]+(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/;
+    const match = rangeStr.match(rangeRegex);
+
+    if (match && match.length === 3) {
+        const startDate = tryParseDate(match[1]);
+        const endDate = tryParseDate(match[2]);
+
+        if (startDate && endDate) {
+            // Ensure start date is before end date
+            return {
+                start: startOfDay(startDate < endDate ? startDate : endDate),
+                end: endOfDay(startDate < endDate ? endDate : startDate),
+            };
+        }
     }
+
+    // 2. Fallback: try splitting by hyphen, for simple "date - date" strings
+    const parts = rangeStr.split('-').map(p => p.trim());
+    if (parts.length === 2) {
+        const startDate = tryParseDate(parts[0]);
+        const endDate = tryParseDate(parts[1]);
+        if (startDate && endDate) {
+            return { start: startOfDay(startDate), end: endOfDay(endDate) };
+        }
+    }
+
+    console.error("Não foi possível extrair um período de datas de:", rangeStr);
+    return null;
 };
 
 const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], dateRange: { start: Date, end: Date } | null } => {
-    const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 4) throw new Error("Formato de arquivo de atendimento inválido.");
     const dateRange = parseDateRangeFromString(lines[0]);
     const rawHourHeaders = lines[1].split(';');
@@ -147,7 +176,7 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
 };
 
 const parseSalesCsv = (csvText: string): SalespersonSales[] => {
-    const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) throw new Error("Formato de arquivo de vendas inválido.");
     
     const dataRows = lines.slice(1); // Pular cabeçalho
@@ -351,7 +380,7 @@ export default function SalesAnalyzer() {
         setAiSummary(null);
       })
       .finally(() => setIsAiLoading(false));
-  }, [activeData.combinedAttendanceCsv, activeData.combinedSalesCsv, activeData.displayDateRange, toast]);
+  }, [activeData.combinedAttendanceCsv, activeData.combinedSalesCsv, activeData.combinedSalesCsv, activeData.displayDateRange, toast]);
 
   const resetData = useCallback(() => {
     setLoadedAttendanceFiles([]);
@@ -566,3 +595,5 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
