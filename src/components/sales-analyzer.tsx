@@ -409,7 +409,6 @@ export default function SalesAnalyzer() {
   }, [toast]);
   
   const handleGeneratePdf = useCallback(async () => {
-    // Hide buttons during capture to avoid them appearing in the PDF
     const triggerElements = document.querySelectorAll<HTMLElement>('[data-pdf-hide]');
     triggerElements.forEach(el => el.style.display = 'none');
 
@@ -420,7 +419,6 @@ export default function SalesAnalyzer() {
         title: "Erro ao gerar PDF",
         description: "Elemento do relatório não encontrado.",
       });
-      // Show buttons again on error
       triggerElements.forEach(el => el.style.display = 'flex');
       return;
     }
@@ -429,11 +427,10 @@ export default function SalesAnalyzer() {
 
     try {
       const canvas = await html2canvas(input, {
-        scale: 2, // Higher resolution
-        useCORS: true, // For images from other domains
+        scale: 2,
+        useCORS: true,
       });
 
-      // Show buttons again after capture
       triggerElements.forEach(el => el.style.display = 'flex');
 
       const imgData = canvas.toDataURL('image/png');
@@ -474,7 +471,6 @@ export default function SalesAnalyzer() {
         title: "Erro ao Gerar PDF",
         description: "Ocorreu um problema ao tentar criar o arquivo PDF.",
       });
-      // Ensure buttons are visible if an error occurs
       triggerElements.forEach(el => el.style.display = 'flex');
     } finally {
       setIsGeneratingPdf(false);
