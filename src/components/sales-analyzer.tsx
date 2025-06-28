@@ -1,9 +1,18 @@
+
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import type { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { ptBR } from 'date-fns/locale';
+import { parse as parseDate, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+
 import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-summary-flow';
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar, X, FileText, Loader2, Sparkles, Zap, TrendingUp, CheckCircle, DollarSign, HelpCircle } from 'lucide-react';
+import { 
+    UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, Zap, 
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog
+} from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,8 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 type HourlyData = {
   hour: number;
@@ -27,19 +40,38 @@ type SalespersonPerformance = {
   totalPotentials: number;
 };
 
-// Placeholder for sales data structure
-type SalesData = {
-  salesperson: string;
-  totalSales: number;
-  numberOfSales: number;
+type LoadedFile = {
+    name: string;
+    content: string;
+    dateRange: { start: Date; end: Date };
+    parsedData: SalespersonPerformance[];
 };
 
-const parseAttendanceCsv = (csvText: string): SalespersonPerformance[] => {
+const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } | null => {
+    try {
+        const parts = rangeStr.split('-').map(p => p.trim());
+        if (parts.length !== 2) return null;
+        const [startStr, endStr] = parts;
+        const start = startOfDay(parseDate(startStr, 'yyyy/MM/dd', new Date()));
+        const end = endOfDay(parseDate(endStr, 'yyyy/MM/dd', new Date()));
+
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+        return { start, end };
+    } catch (e) {
+        console.error("Erro ao parsear o período:", e);
+        return null;
+    }
+};
+
+const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], dateRange: { start: Date, end: Date } | null } => {
     const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
     
     if (lines.length < 4) {
       throw new Error("Formato de arquivo inválido. É esperado ao menos um período, duas linhas de cabeçalho e uma linha de dados.");
     }
+
+    const dateRange = parseDateRangeFromString(lines[0]);
     
     const rawHourHeaders = lines[1].split(';');
     let lastHourHeader = '';
@@ -124,47 +156,45 @@ const parseAttendanceCsv = (csvText: string): SalespersonPerformance[] => {
     if (parsedData.length === 0) {
         throw new Error("Nenhum dado válido encontrado no arquivo.");
     }
-    return parsedData;
+    return { data: parsedData, dateRange };
 }
 
-const mergeAttendanceData = (existing: SalespersonPerformance[], newData: SalespersonPerformance[]): SalespersonPerformance[] => {
+const mergeAttendanceData = (datasets: SalespersonPerformance[][]): SalespersonPerformance[] => {
     const mergedMap = new Map<string, SalespersonPerformance>();
 
-    for (const person of existing) {
-        mergedMap.set(person.salesperson, JSON.parse(JSON.stringify(person)));
-    }
-
-    for (const newPerson of newData) {
-        if (mergedMap.has(newPerson.salesperson)) {
-            const existingPerson = mergedMap.get(newPerson.salesperson)!;
-            const hourlyMap = new Map<number, HourlyData>();
-            for (const h of existingPerson.hourly) {
-                hourlyMap.set(h.hour, {...h});
-            }
-
-            for (const newHour of newPerson.hourly) {
-                if (hourlyMap.has(newHour.hour)) {
-                    const existingHour = hourlyMap.get(newHour.hour)!;
-                    existingHour.attendances += newHour.attendances;
-                    existingHour.potentials += newHour.potentials;
-                } else {
-                    hourlyMap.set(newHour.hour, {...newHour});
+    for (const dataset of datasets) {
+        for (const newPerson of dataset) {
+            if (mergedMap.has(newPerson.salesperson)) {
+                const existingPerson = mergedMap.get(newPerson.salesperson)!;
+                const hourlyMap = new Map<number, HourlyData>();
+                for (const h of existingPerson.hourly) {
+                    hourlyMap.set(h.hour, {...h});
                 }
+
+                for (const newHour of newPerson.hourly) {
+                    if (hourlyMap.has(newHour.hour)) {
+                        const existingHour = hourlyMap.get(newHour.hour)!;
+                        existingHour.attendances += newHour.attendances;
+                        existingHour.potentials += newHour.potentials;
+                    } else {
+                        hourlyMap.set(newHour.hour, {...newHour});
+                    }
+                }
+                existingPerson.hourly = Array.from(hourlyMap.values()).sort((a,b) => a.hour - b.hour);
+                existingPerson.totalAttendances = existingPerson.hourly.reduce((sum, h) => sum + h.attendances, 0);
+                existingPerson.totalPotentials = existingPerson.hourly.reduce((sum, h) => sum + h.potentials, 0);
+            } else {
+                mergedMap.set(newPerson.salesperson, JSON.parse(JSON.stringify(newPerson)));
             }
-            existingPerson.hourly = Array.from(hourlyMap.values()).sort((a,b) => a.hour - b.hour);
-            existingPerson.totalAttendances = existingPerson.hourly.reduce((sum, h) => sum + h.attendances, 0);
-            existingPerson.totalPotentials = existingPerson.hourly.reduce((sum, h) => sum + h.potentials, 0);
-        } else {
-            mergedMap.set(newPerson.salesperson, JSON.parse(JSON.stringify(newPerson)));
         }
     }
     return Array.from(mergedMap.values());
 };
 
 export default function SalesAnalyzer() {
-  const [attendanceData, setAttendanceData] = useState<SalespersonPerformance[]>([]);
-  const [salesData, setSalesData] = useState<SalesData[]>([]);
-  const [fileContents, setFileContents] = useState<{ attendance: string[], sales: string[] }>({ attendance: [], sales: [] });
+  const [loadedFiles, setLoadedFiles] = useState<LoadedFile[]>([]);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>();
   
   const [isLoading, setIsLoading] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -181,6 +211,16 @@ export default function SalesAnalyzer() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (loadedFiles.some(f => f.name === file.name)) {
+        toast({
+            variant: "destructive",
+            title: "Arquivo Duplicado",
+            description: `O arquivo "${file.name}" já foi carregado.`,
+        });
+        setAttendanceInputKey(Date.now());
+        return;
+    }
+
     if (type === 'sales') {
         toast({
             title: "Funcionalidade em Desenvolvimento",
@@ -196,18 +236,24 @@ export default function SalesAnalyzer() {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const newParsedData = parseAttendanceCsv(text);
+        const { data: newParsedData, dateRange } = parseAttendanceCsv(text);
         
-        setAttendanceData(currentData => mergeAttendanceData(currentData, newParsedData));
-        setFileContents(currentContents => ({
-            ...currentContents,
-            attendance: [...currentContents.attendance, text]
-        }));
-        setAiSummary(null);
+        if (!dateRange) {
+            throw new Error("Não foi possível encontrar um período de datas válido na primeira linha do arquivo.");
+        }
+
+        const newFile: LoadedFile = {
+            name: file.name,
+            content: text,
+            dateRange: dateRange,
+            parsedData: newParsedData
+        };
+
+        setLoadedFiles(currentFiles => [...currentFiles, newFile]);
 
         toast({
           title: "Arquivo de Atendimento Carregado",
-          description: `Dados de ${newParsedData.length} vendedores foram adicionados ao relatório.`,
+          description: `Dados de "${file.name}" foram adicionados com sucesso.`,
         });
 
       } catch (err) {
@@ -231,27 +277,50 @@ export default function SalesAnalyzer() {
       });
     };
     reader.readAsText(file, 'UTF-8');
-  }, [toast]);
+  }, [toast, loadedFiles]);
+  
+  const activeData = useMemo(() => {
+    const filesToProcess = filterDateRange?.from
+      ? loadedFiles.filter(file => {
+          const fileInterval = { start: file.dateRange.start, end: file.dateRange.end };
+          const filterInterval = { start: startOfDay(filterDateRange.from!), end: endOfDay(filterDateRange.to ?? filterDateRange.from!) };
+          return isWithinInterval(fileInterval.start, filterInterval) || isWithinInterval(fileInterval.end, filterInterval) || 
+                 (fileInterval.start < filterInterval.start && fileInterval.end > filterInterval.end);
+        })
+      : loadedFiles;
+
+    if (filesToProcess.length === 0) {
+        return {
+            mergedPerformances: [],
+            combinedCsvForAI: '',
+            displayDateRange: 'Nenhum dado para o período selecionado'
+        };
+    }
+    
+    const mergedPerformances = mergeAttendanceData(filesToProcess.map(f => f.parsedData));
+    
+    const firstFileHeader = filesToProcess.length > 0 ? filesToProcess[0].content.split('\n').slice(0, 3).join('\n') : '';
+    const combinedRows = filesToProcess.map(f => f.content.split('\n').slice(3).join('\n')).join('\n');
+    const combinedCsvForAI = `${firstFileHeader}\n${combinedRows}`;
+    
+    const dateRanges = filesToProcess.map(f => f.content.split('\n')[0].trim());
+    const uniqueDateRanges = [...new Set(dateRanges)];
+    const displayDateRange = uniqueDateRanges.join(' & ');
+
+    return { mergedPerformances, combinedCsvForAI, displayDateRange };
+
+  }, [loadedFiles, filterDateRange]);
+
 
   useEffect(() => {
-    if (fileContents.attendance.length === 0 && fileContents.sales.length === 0) {
-      return;
+    if (!activeData.combinedCsvForAI) {
+        setAiSummary(null);
+        return;
     }
     
     setIsAiLoading(true);
-    // Combine all CSV data. For now, just attendance.
-    const rawCsvForAI = fileContents.attendance.map(content => {
-        // Remove header lines from subsequent files to avoid confusing the AI
-        return content.split('\n').slice(3).join('\n');
-    }).join('\n');
 
-    const firstFileHeader = fileContents.attendance.length > 0 ? fileContents.attendance[0].split('\n').slice(0, 3).join('\n') : '';
-    const combinedCsv = `${firstFileHeader}\n${rawCsvForAI}`;
-    
-    const dateRanges = fileContents.attendance.map(csv => csv.split('\n')[0].trim());
-    const uniqueDateRanges = [...new Set(dateRanges)];
-
-    summarizeSalesData({ csvData: combinedCsv, dateRange: uniqueDateRanges.join(' & ') })
+    summarizeSalesData({ csvData: activeData.combinedCsvForAI, dateRange: activeData.displayDateRange })
       .then(summary => {
         setAiSummary(summary);
       })
@@ -262,40 +331,43 @@ export default function SalesAnalyzer() {
           title: "Falha na Análise de IA",
           description: "A IA não conseguiu gerar insights para estes dados.",
         });
+        setAiSummary(null);
       })
       .finally(() => {
         setIsAiLoading(false);
       });
-  }, [fileContents, toast]);
+  }, [activeData.combinedCsvForAI, activeData.displayDateRange, toast]);
 
   const resetData = useCallback(() => {
-    setAttendanceData([]);
-    setSalesData([]);
-    setFileContents({ attendance: [], sales: [] });
+    setLoadedFiles([]);
     setSelectedSalesperson('all');
     setAiSummary(null);
+    setFilterDateRange(undefined);
     setAttendanceInputKey(Date.now());
     setSalesInputKey(Date.now());
+    setIsImportOpen(false);
     toast({
         title: "Dados Resetados",
         description: "Todos os dados foram limpos. Você pode começar uma nova análise.",
     });
   }, [toast]);
-
-  const uniqueSalespeople = useMemo(() => ['all', ...attendanceData.map(d => d.salesperson).sort()], [attendanceData]);
-
-  const filteredData = useMemo(() => {
-    if (selectedSalesperson === 'all') return attendanceData;
-    return attendanceData.filter(d => d.salesperson === selectedSalesperson);
-  }, [attendanceData, selectedSalesperson]);
   
-  const totalAttendances = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalAttendances, 0), [filteredData]);
-  const totalPotentials = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalPotentials, 0), [filteredData]);
+  const { mergedPerformances } = activeData;
+
+  const uniqueSalespeople = useMemo(() => ['all', ...mergedPerformances.map(d => d.salesperson).sort()], [mergedPerformances]);
+
+  const filteredDataBySalesperson = useMemo(() => {
+    if (selectedSalesperson === 'all') return mergedPerformances;
+    return mergedPerformances.filter(d => d.salesperson === selectedSalesperson);
+  }, [mergedPerformances, selectedSalesperson]);
+  
+  const totalAttendances = useMemo(() => filteredDataBySalesperson.reduce((sum, p) => sum + p.totalAttendances, 0), [filteredDataBySalesperson]);
+  const totalPotentials = useMemo(() => filteredDataBySalesperson.reduce((sum, p) => sum + p.totalPotentials, 0), [filteredDataBySalesperson]);
   const opportunityRatio = useMemo(() => totalAttendances > 0 ? (totalPotentials / totalAttendances) : 0, [totalAttendances, totalPotentials]);
 
   const hourlyTotals = useMemo(() => {
     const totals = new Map<number, { attendances: number, potentials: number }>();
-    filteredData.forEach(person => {
+    filteredDataBySalesperson.forEach(person => {
         person.hourly.forEach(h => {
             const current = totals.get(h.hour) || { attendances: 0, potentials: 0 };
             current.attendances += h.attendances;
@@ -310,16 +382,8 @@ export default function SalesAnalyzer() {
             potentials: data.potentials,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredData]);
+  }, [filteredDataBySalesperson]);
   
-  const displayedDateRange = useMemo(() => {
-    if (fileContents.attendance.length === 0) return "Nenhum período carregado";
-    const dateRanges = fileContents.attendance.map(csv => csv.split('\n')[0].trim());
-    const uniqueRanges = [...new Set(dateRanges)];
-    if (uniqueRanges.length === 1) return uniqueRanges[0];
-    return "Múltiplos Períodos";
-  }, [fileContents.attendance]);
-
   return (
     <div className="min-h-screen animate-in fade-in-50 bg-secondary/50">
       <header className="sticky top-0 z-30 bg-card shadow-sm">
@@ -328,50 +392,73 @@ export default function SalesAnalyzer() {
             <BarChartIcon className="text-primary" />
             <span>Analisador de Vendas</span>
           </h1>
-          {attendanceData.length > 0 && (
-            <Button variant="destructive" size="sm" onClick={resetData}>
-                <X className="mr-2 h-4 w-4" /> Limpar e Recomeçar
-            </Button>
-          )}
+            <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline">
+                        <Cog className="mr-2 h-4 w-4" /> Configurar e Importar
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[800px]">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline text-2xl">Importar Dados</DialogTitle>
+                        <DialogDescription>
+                            Carregue seus arquivos CSV para análise. Os dados importados são acumulativos e podem ser filtrados por período no painel principal.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid md:grid-cols-2 gap-6 py-4">
+                        <div>
+                            <Label htmlFor="attendance-upload" className="font-semibold text-base mb-2 block">1. Atendimentos e Potenciais</Label>
+                            <label htmlFor="attendance-upload" className="cursor-pointer group">
+                                <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors duration-300">
+                                    <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                                    <p className="mt-4 text-sm text-muted-foreground">
+                                    <span className="font-semibold text-primary">Clique para carregar</span> ou arraste
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Arquivo CSV com atendimentos</p>
+                                </div>
+                                <input key={attendanceInputKey} id="attendance-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'attendance')} disabled={isLoading} />
+                            </label>
+                        </div>
+                        <div>
+                            <Label htmlFor="sales-upload" className="font-semibold text-base mb-2 block">2. Vendas Realizadas</Label>
+                            <label htmlFor="sales-upload" className="cursor-pointer group">
+                                <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors duration-300 bg-muted/25 opacity-70">
+                                    <DollarSign className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                                    <p className="mt-4 text-sm text-muted-foreground">
+                                    <span className="font-semibold text-primary">Clique para carregar</span> ou arraste
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">Arquivo CSV com vendas (em breve)</p>
+                                </div>
+                                <input key={salesInputKey} id="sales-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'sales')} />
+                            </label>
+                        </div>
+                    </div>
+                    {loadedFiles.length > 0 && (
+                        <div className="mt-4">
+                            <h3 className="font-semibold mb-2">Arquivos Carregados</h3>
+                            <ScrollArea className="h-[100px] border rounded-md p-2">
+                                <ul className="space-y-1">
+                                    {loadedFiles.map(file => (
+                                        <li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>
+                                    ))}
+                                </ul>
+                            </ScrollArea>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        {loadedFiles.length > 0 && (
+                            <Button variant="destructive" onClick={resetData}>
+                                <X className="mr-2 h-4 w-4" /> Limpar Tudo e Recomeçar
+                            </Button>
+                        )}
+                        <Button onClick={() => setIsImportOpen(false)}>Fechar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
       </header>
       
       <main className="container mx-auto p-4 md:p-6 space-y-6">
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-2xl font-headline">Importar Dados</CardTitle>
-                <CardDescription>Carregue seus arquivos CSV para análise. Os dados importados são acumulativos.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-6">
-                <div>
-                    <Label htmlFor="attendance-upload" className="font-semibold text-base mb-2 block">1. Atendimentos e Potenciais</Label>
-                    <label htmlFor="attendance-upload" className="cursor-pointer group">
-                        <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors duration-300">
-                            <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
-                            <p className="mt-4 text-sm text-muted-foreground">
-                            <span className="font-semibold text-primary">Clique para carregar</span> ou arraste
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">Arquivo CSV com atendimentos</p>
-                        </div>
-                        <input key={attendanceInputKey} id="attendance-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'attendance')} disabled={isLoading} />
-                    </label>
-                </div>
-                <div>
-                    <Label htmlFor="sales-upload" className="font-semibold text-base mb-2 block">2. Vendas Realizadas</Label>
-                    <label htmlFor="sales-upload" className="cursor-pointer group">
-                        <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors duration-300 bg-muted/25 opacity-70">
-                            <DollarSign className="w-10 h-10 text-muted-foreground group-hover:text-primary transition-colors" />
-                            <p className="mt-4 text-sm text-muted-foreground">
-                            <span className="font-semibold text-primary">Clique para carregar</span> ou arraste
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">Arquivo CSV com vendas (em breve)</p>
-                        </div>
-                        <input key={salesInputKey} id="sales-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'sales')} />
-                    </label>
-                </div>
-            </CardContent>
-        </Card>
-
         {isLoading && (
             <div className="mt-4 flex items-center justify-center text-primary">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -379,29 +466,58 @@ export default function SalesAnalyzer() {
             </div>
         )}
 
-        {attendanceData.length === 0 && !isLoading && (
+        {loadedFiles.length === 0 && !isLoading && (
             <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit">
                         <HelpCircle className="w-10 h-10 text-primary" />
                     </div>
-                    <CardTitle className="font-headline text-3xl mt-4">Aguardando Dados</CardTitle>
-                    <CardDescription className="text-md text-muted-foreground">
-                        Comece importando um arquivo de atendimentos para visualizar o dashboard.
+                    <CardTitle className="font-headline text-3xl mt-4">Bem-vindo ao Analisador de Vendas</CardTitle>
+                    <CardDescription className="text-md text-muted-foreground max-w-xl mx-auto">
+                        Para começar, clique em <span className="font-semibold text-primary">"Configurar e Importar"</span> no canto superior direito e carregue seu primeiro arquivo de atendimentos.
                     </CardDescription>
                 </CardHeader>
             </Card>
         )}
 
-        {attendanceData.length > 0 && (
+        {loadedFiles.length > 0 && (
         <div className="animate-in fade-in-50">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center mb-6">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6">
                 <div className="flex-1">
                     <h2 className="text-2xl font-headline text-foreground">Dashboard de Desempenho</h2>
-                    <p className="text-muted-foreground">Análise para o período: <span className="font-semibold text-primary">{displayedDateRange}</span></p>
+                    <p className="text-muted-foreground">Análise para o período: <span className="font-semibold text-primary">{activeData.displayDateRange}</span></p>
                 </div>
-                <div className="w-full md:w-auto">
-                    <Label htmlFor="salesperson-filter" className="sr-only">Filtrar por Vendedor(a)</Label>
+                <div className="w-full flex-col md:flex-row flex gap-2">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button id="date" variant={"outline"} className={cn("w-full md:w-[280px] justify-start text-left font-normal", !filterDateRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {filterDateRange?.from ? (
+                                    filterDateRange.to ? (
+                                        <>
+                                            {format(filterDateRange.from, "dd/MM/yy", { locale: ptBR })} -{' '}
+                                            {format(filterDateRange.to, "dd/MM/yy", { locale: ptBR })}
+                                        </>
+                                    ) : (
+                                        format(filterDateRange.from, "dd/MM/yy", { locale: ptBR })
+                                    )
+                                ) : (
+                                    <span>Filtrar por Período</span>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={filterDateRange?.from}
+                                selected={filterDateRange}
+                                onSelect={setFilterDateRange}
+                                numberOfMonths={2}
+                                locale={ptBR}
+                            />
+                        </PopoverContent>
+                    </Popover>
                     <Select onValueChange={setSelectedSalesperson} value={selectedSalesperson}>
                         <SelectTrigger id="salesperson-filter" className="w-full md:w-[250px] bg-card">
                         <SelectValue placeholder="Selecione um(a) vendedor(a)" />
@@ -417,7 +533,7 @@ export default function SalesAnalyzer() {
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Atendimentos</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalAttendances}</div><p className="text-xs text-muted-foreground truncate">{selectedSalesperson === 'all' ? 'Todos os vendedores' : selectedSalesperson}</p></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total de Potenciais</CardTitle><Target className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalPotentials}</div><p className="text-xs text-muted-foreground">novos clientes em potencial</p></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Taxa de Oportunidade</CardTitle><Zap className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{opportunityRatio.toFixed(2)}</div><p className="text-xs text-muted-foreground">Potenciais por atendimento</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Vendedores Ativos</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{attendanceData.length}</div><p className="text-xs text-muted-foreground">Vendedores no período</p></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Vendedores Ativos</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{uniqueSalespeople.length - 1}</div><p className="text-xs text-muted-foreground">Vendedores no período</p></CardContent></Card>
             </div>
             
             <div className="grid gap-6 lg:grid-cols-5 mt-6">
@@ -437,7 +553,7 @@ export default function SalesAnalyzer() {
                                 <Table>
                                     <TableHeader><TableRow><TableHead className="w-[180px]">Vendedor(a)</TableHead><TableHead className="text-right">Atendimentos</TableHead><TableHead className="text-right">Potenciais</TableHead><TableHead className="text-right">Tx. Oport.</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {filteredData.length > 0 ? filteredData.sort((a,b) => b.totalAttendances - a.totalAttendances).map(item => (
+                                        {filteredDataBySalesperson.length > 0 ? filteredDataBySalesperson.sort((a,b) => b.totalAttendances - a.totalAttendances).map(item => (
                                             <TableRow key={item.salesperson}>
                                                 <TableCell className="font-medium">{item.salesperson}</TableCell>
                                                 <TableCell className="text-right font-bold text-primary">{item.totalAttendances}</TableCell>
@@ -452,7 +568,7 @@ export default function SalesAnalyzer() {
                     </Card>
                 </div>
                 <div className="lg:col-span-2">
-                    {isAiLoading && (
+                    {(isAiLoading && mergedPerformances.length > 0) && (
                       <Card><CardHeader><CardTitle className="flex items-center gap-2 font-headline"><Sparkles className="h-6 w-6 text-primary animate-pulse" />Analisando Insights...</CardTitle><CardDescription>A IA está preparando um resumo para você.</CardDescription></CardHeader>
                         <CardContent className="space-y-4"><div className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div><div className="space-y-2 pt-4"><Skeleton className="h-4 w-32 mb-2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /></div><div className="space-y-2 pt-4"><Skeleton className="h-4 w-32 mb-2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /></div></CardContent>
                       </Card>)}
