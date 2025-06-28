@@ -57,7 +57,7 @@ export default function SalesAnalyzer() {
         
         setDateRange(lines[0]);
 
-        const rawHourHeaders = lines[1].split(',');
+        const rawHourHeaders = lines[1].split(';');
         let lastHourHeader = '';
         const hourHeaders = rawHourHeaders.map(h => {
             const trimmed = h.trim();
@@ -68,7 +68,7 @@ export default function SalesAnalyzer() {
             return lastHourHeader;
         });
 
-        const metricHeaders = lines[2].split(',').map(h => h.trim().toLowerCase());
+        const metricHeaders = lines[2].split(';').map(h => h.trim().toLowerCase());
 
         if (!metricHeaders[0].startsWith('vendedor')) {
           throw new Error("Formato de cabeçalho inválido. A primeira coluna da segunda linha de cabeçalho deve ser 'Vendedor'.");
@@ -104,7 +104,7 @@ export default function SalesAnalyzer() {
         const parsedData: SalespersonPerformance[] = [];
 
         for (const row of dataRows) {
-          const values = row.split(',').map(v => v.trim());
+          const values = row.split(';').map(v => v.trim());
           const salesperson = values[0];
           if (salesperson.toLowerCase() === 'total' || !salesperson) continue;
 
