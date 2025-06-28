@@ -262,7 +262,7 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
 };
 
 
-export default function SalesAnalyzer() {
+const SalesAnalyzer = () => {
   const [loadedAttendanceFiles, setLoadedAttendanceFiles] = useState<LoadedAttendanceFile[]>([]);
   const [loadedSalesFiles, setLoadedSalesFiles] = useState<LoadedSalesFile[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -659,7 +659,7 @@ export default function SalesAnalyzer() {
                                 <Table>
                                     <TableHeader><TableRow><TableHead>Vendedor(a)</TableHead><TableHead className="text-right">Atend.</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead className="text-right">Conversão</TableHead><TableHead className="text-right">Receita</TableHead><TableHead className="text-right">Ticket Médio</TableHead></TableRow></TableHeader>
                                     <TableBody>
-                                        {displayData.length > 0 ? displayData.sort((a,b) => b.totalRevenue - a.totalRevenue).map(item => (
+                                        {displayData.length > 0 ? [...displayData].sort((a,b) => b.totalRevenue - a.totalRevenue).map(item => (
                                             <TableRow key={item.salesperson}>
                                                 <TableCell className="font-medium">{item.salesperson}</TableCell>
                                                 <TableCell className="text-right">{item.totalAttendances}</TableCell>
@@ -721,3 +721,5 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+export default SalesAnalyzer;
