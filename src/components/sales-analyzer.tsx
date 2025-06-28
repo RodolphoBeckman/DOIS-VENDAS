@@ -6,12 +6,14 @@ import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from 'date-fns/locale';
 import { parse as parseDate, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-summary-flow';
 import { useToast } from "@/hooks/use-toast";
 import { 
     UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
-    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog, FileDown
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -268,6 +270,7 @@ export default function SalesAnalyzer() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   
   const [attendanceInputKey, setAttendanceInputKey] = useState(Date.now());
   const [salesInputKey, setSalesInputKey] = useState(Date.now());
@@ -405,6 +408,79 @@ export default function SalesAnalyzer() {
     toast({ title: "Dados Resetados", description: "Pode começar uma nova análise." });
   }, [toast]);
   
+  const handleGeneratePdf = useCallback(async () => {
+    // Hide buttons during capture to avoid them appearing in the PDF
+    const triggerElements = document.querySelectorAll<HTMLElement>('[data-pdf-hide]');
+    triggerElements.forEach(el => el.style.display = 'none');
+
+    const input = document.getElementById('report-content');
+    if (!input) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao gerar PDF",
+        description: "Elemento do relatório não encontrado.",
+      });
+      // Show buttons again on error
+      triggerElements.forEach(el => el.style.display = 'flex');
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+
+    try {
+      const canvas = await html2canvas(input, {
+        scale: 2, // Higher resolution
+        useCORS: true, // For images from other domains
+      });
+
+      // Show buttons again after capture
+      triggerElements.forEach(el => el.style.display = 'flex');
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pdfWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft > 0) {
+        position = -heightLeft;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+      
+      const today = new Date();
+      const formattedDate = format(today, 'dd-MM-yyyy');
+      pdf.save(`relatorio-de-desempenho-${formattedDate}.pdf`);
+
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao Gerar PDF",
+        description: "Ocorreu um problema ao tentar criar o arquivo PDF.",
+      });
+      // Ensure buttons are visible if an error occurs
+      triggerElements.forEach(el => el.style.display = 'flex');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [toast]);
+  
   const { consolidatedData } = activeData;
 
   const uniqueSalespeople = useMemo(() => ['all', ...consolidatedData.map(d => d.salesperson).sort()], [consolidatedData]);
@@ -454,63 +530,69 @@ export default function SalesAnalyzer() {
             <BarChartIcon className="text-primary" />
             <span>Analisador de Vendas</span>
           </h1>
-            <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-                <DialogTrigger asChild>
-                    <Button variant="outline"><Cog className="mr-2 h-4 w-4" /> Configurar e Importar</Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[800px]">
-                    <DialogHeader>
-                        <DialogTitle className="font-headline text-2xl">Importar Dados</DialogTitle>
-                        <DialogDescription>Carregue seus arquivos CSV. Os dados são acumulados a cada novo upload.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid md:grid-cols-2 gap-6 py-4">
-                        <div>
-                            <Label htmlFor="attendance-upload" className="font-semibold text-base mb-2 block">1. Atendimentos e Potenciais</Label>
-                            <label htmlFor="attendance-upload" className="cursor-pointer group">
-                                <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
-                                    <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
-                                    <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Atendimento</p>
-                                </div>
-                                <input key={attendanceInputKey} id="attendance-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'attendance')} disabled={isLoading} />
-                            </label>
-                        </div>
-                        <div>
-                            <Label htmlFor="sales-upload" className="font-semibold text-base mb-2 block">2. Vendas Realizadas (PDV)</Label>
-                            <label htmlFor="sales-upload" className="cursor-pointer group">
-                                <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
-                                    <DollarSign className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
-                                    <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Vendas</p>
-                                </div>
-                                <input key={salesInputKey} id="sales-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'sales')} disabled={isLoading} />
-                            </label>
-                        </div>
-                    </div>
-                    {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
-                        <div className="mt-4 grid grid-cols-2 gap-4">
-                            <div>
-                                <h3 className="font-semibold mb-2">Atendimentos Carregados</h3>
-                                <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedAttendanceFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
-                            </div>
-                             <div>
-                                <h3 className="font-semibold mb-2">Vendas Carregadas</h3>
-                                <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedSalesFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
-                            </div>
-                        </div>
-                    )}
-                    <DialogFooter>
-                        {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
-                            <Button variant="destructive" onClick={resetData}><X className="mr-2 h-4 w-4" /> Limpar Tudo</Button>
-                        )}
-                        <Button onClick={() => setIsImportOpen(false)}>Fechar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+          <div className="flex items-center gap-2" data-pdf-hide>
+              <Button onClick={handleGeneratePdf} variant="outline" disabled={isGeneratingPdf || (loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0)}>
+                  {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                  Gerar PDF
+              </Button>
+              <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+                  <DialogTrigger asChild>
+                      <Button variant="outline"><Cog className="mr-2 h-4 w-4" /> Configurar e Importar</Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[800px]">
+                      <DialogHeader>
+                          <DialogTitle className="font-headline text-2xl">Importar Dados</DialogTitle>
+                          <DialogDescription>Carregue seus arquivos CSV. Os dados são acumulados a cada novo upload.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid md:grid-cols-2 gap-6 py-4">
+                          <div>
+                              <Label htmlFor="attendance-upload" className="font-semibold text-base mb-2 block">1. Atendimentos e Potenciais</Label>
+                              <label htmlFor="attendance-upload" className="cursor-pointer group">
+                                  <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+                                      <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
+                                      <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
+                                      <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Atendimento</p>
+                                  </div>
+                                  <input key={attendanceInputKey} id="attendance-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'attendance')} disabled={isLoading} />
+                              </label>
+                          </div>
+                          <div>
+                              <Label htmlFor="sales-upload" className="font-semibold text-base mb-2 block">2. Vendas Realizadas (PDV)</Label>
+                              <label htmlFor="sales-upload" className="cursor-pointer group">
+                                  <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+                                      <DollarSign className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
+                                      <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
+                                      <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Vendas</p>
+                                  </div>
+                                  <input key={salesInputKey} id="sales-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'sales')} disabled={isLoading} />
+                              </label>
+                          </div>
+                      </div>
+                      {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
+                          <div className="mt-4 grid grid-cols-2 gap-4">
+                              <div>
+                                  <h3 className="font-semibold mb-2">Atendimentos Carregados</h3>
+                                  <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedAttendanceFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
+                              </div>
+                               <div>
+                                  <h3 className="font-semibold mb-2">Vendas Carregadas</h3>
+                                  <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedSalesFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
+                              </div>
+                          </div>
+                      )}
+                      <DialogFooter>
+                          {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
+                              <Button variant="destructive" onClick={resetData}><X className="mr-2 h-4 w-4" /> Limpar Tudo</Button>
+                          )}
+                          <Button onClick={() => setIsImportOpen(false)}>Fechar</Button>
+                      </DialogFooter>
+                  </DialogContent>
+              </Dialog>
+            </div>
         </div>
       </header>
       
-      <main className="container mx-auto p-4 md:p-6 space-y-6">
+      <main id="report-content" className="container mx-auto p-4 md:p-6 space-y-6">
         {isLoading && (<div className="flex items-center justify-center text-primary"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivo...</span></div>)}
         {(loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0) && !isLoading && (
             <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
@@ -523,7 +605,7 @@ export default function SalesAnalyzer() {
         )}
         {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
         <div className="animate-in fade-in-50">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6" data-pdf-hide>
                 <div className="flex-1">
                     <h2 className="text-2xl font-headline text-foreground">Dashboard de Desempenho</h2>
                     <p className="text-muted-foreground">Análise para o período: <span className="font-semibold text-primary">{activeData.displayDateRange}</span></p>
@@ -617,7 +699,7 @@ export default function SalesAnalyzer() {
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <DollarSign className="h-6 w-6 text-amber-500" />Próximo Passo
                                 </CardTitle>
-                            </CardHeader>
+                            </Header>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de vendas (PDV)</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
@@ -629,7 +711,7 @@ export default function SalesAnalyzer() {
                                 <CardTitle className="flex items-center gap-2 font-headline">
                                     <Users className="h-6 w-6 text-amber-500" />Próximo Passo
                                 </CardTitle>
-                            </CardHeader>
+                            </Header>
                             <CardContent>
                                 <p className="text-muted-foreground">Você carregou os dados de vendas. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
                             </CardContent>
