@@ -1,3 +1,9 @@
+import SalesAnalyzer from '@/components/sales-analyzer';
+
 export default function Home() {
-  return <></>;
+  return (
+    <main>
+      <SalesAnalyzer />
+    </main>
+  );
 }
