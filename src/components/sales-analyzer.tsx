@@ -20,7 +20,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
@@ -28,7 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Tipos para dados de Atendimento
 type HourlyData = {
@@ -749,22 +748,22 @@ export default function SalesAnalyzer() {
                       <Card className="animate-in fade-in-50 sticky top-24">
                          <CardHeader><CardTitle className="flex items-center gap-2 font-headline"><Sparkles className="h-6 w-6 text-primary" />Insights com IA</CardTitle></CardHeader>
                          <CardContent className="space-y-6 text-sm">
-                            <div><h3 className="font-semibold text-base mb-2">Resumo Geral</h3><p className="leading-relaxed text-muted-foreground">{aiSummary.summary}</p></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2 text-muted-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2 text-muted-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+                            <div><h3 className="font-semibold text-base mb-2">Resumo Geral</h3><p className="leading-relaxed text-foreground">{aiSummary.summary}</p></div>
+                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2 text-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
+                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2 text-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
                             {aiSummary.individualHighlights && aiSummary.individualHighlights.length > 0 && (
                                 <div>
                                     <h3 className="font-semibold flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-primary"/>Destaques Individuais</h3>
-                                    <Accordion type="single" collapsible className="w-full">
+                                    <div className="space-y-4 pt-2">
                                         {aiSummary.individualHighlights.map((item, index) => (
-                                            <AccordionItem value={`item-${index}`} key={index}>
-                                                <AccordionTrigger className="font-medium hover:no-underline">{item.salesperson}</AccordionTrigger>
-                                                <AccordionContent className="text-muted-foreground">
+                                            <div key={index} className="border-t border-border/50 pt-3 first:border-t-0 first:pt-0">
+                                                <p className="font-semibold text-foreground">{item.salesperson}</p>
+                                                <p className="text-sm text-foreground mt-1">
                                                     {item.highlight}
-                                                </AccordionContent>
-                                            </AccordionItem>
+                                                </p>
+                                            </div>
                                         ))}
-                                    </Accordion>
+                                    </div>
                                 </div>
                             )}
                          </CardContent>
