@@ -79,17 +79,16 @@ const cleanSalespersonName = (name: string): string => {
 const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } | null => {
     const tryParseDate = (dateString: string): Date | null => {
         // Common date formats for Brazil and others
-        const formats = ['dd/MM/yyyy', 'yyyy/MM/dd', 'dd-MM-yyyy', 'yyyy-MM-dd'];
+        const formats = ['dd/MM/yyyy', 'yyyy/MM/dd', 'dd-MM-yyyy', 'yyyy-MM-dd', 'd/M/yy', 'd/M/yyyy'];
         for (const format of formats) {
             const date = parseDate(dateString.trim(), format, new Date());
-            if (!isNaN(date.getTime())) {
+            if (!isNaN(date.getTime()) && date.getFullYear() > 1970) {
                 return date;
             }
         }
         return null;
     };
 
-    // 1. Try regex for "date1 any_separator date2"
     const rangeRegex = /(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})[^0-9]+(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})/;
     const match = rangeStr.match(rangeRegex);
 
@@ -98,7 +97,6 @@ const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } 
         const endDate = tryParseDate(match[2]);
 
         if (startDate && endDate) {
-            // Ensure start date is before end date
             return {
                 start: startOfDay(startDate < endDate ? startDate : endDate),
                 end: endOfDay(startDate < endDate ? endDate : startDate),
@@ -106,7 +104,6 @@ const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } 
         }
     }
 
-    // 2. Fallback: try splitting by hyphen, for simple "date - date" strings
     const parts = rangeStr.split('-').map(p => p.trim());
     if (parts.length === 2) {
         const startDate = tryParseDate(parts[0]);
@@ -115,15 +112,23 @@ const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } 
             return { start: startOfDay(startDate), end: endOfDay(endDate) };
         }
     }
-
-    console.error("Não foi possível extrair um período de datas de:", rangeStr);
+    
     return null;
 };
 
-const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], dateRange: { start: Date, end: Date } | null } => {
+const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], dateRange: { start: Date, end: Date } } => {
     const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length < 4) throw new Error("Formato de arquivo de atendimento inválido.");
+    if (lines.length < 4) throw new Error("Formato de arquivo de atendimento inválido. O arquivo parece estar incompleto.");
+
     const dateRange = parseDateRangeFromString(lines[0]);
+    if (!dateRange) {
+        const header = lines[0].toLowerCase();
+        if (header.includes('vendedor') && (header.includes('total vendas') || header.includes('vendas'))) {
+            throw new Error("Arquivo incorreto. Você carregou um arquivo de Vendas na área de Atendimento. Por favor, use a área de upload correspondente.");
+        }
+        throw new Error("Não foi possível encontrar um período de datas válido na primeira linha do arquivo de atendimento. Verifique o arquivo.");
+    }
+    
     const rawHourHeaders = lines[1].split(';');
     let lastHourHeader = '';
     const hourHeaders = rawHourHeaders.map(h => {
@@ -177,7 +182,13 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
 
 const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) throw new Error("Formato de arquivo de vendas inválido.");
+    if (lines.length < 2) throw new Error("Formato de arquivo de vendas inválido. O arquivo parece estar incompleto.");
+
+    const firstLine = lines[0].toLowerCase();
+    const hasDate = /\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(firstLine);
+    if (hasDate && !firstLine.includes('vendedor')) {
+        throw new Error("Arquivo incorreto. Você carregou um arquivo de Atendimento na área de Vendas. Por favor, use a área de upload correspondente.");
+    }
     
     const dataRows = lines.slice(1); // Pular cabeçalho
     const parseCurrency = (str: string) => parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
@@ -187,6 +198,7 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const parsedData: SalespersonSales[] = [];
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
+        if (values.length < 13) continue; // Basic validation for row length
         const rawSalespersonName = values[2]; // 'Nome do Vendedor'
         if (rawSalespersonName?.toLowerCase() === 'total' || !rawSalespersonName) continue;
         
@@ -283,7 +295,6 @@ export default function SalesAnalyzer() {
         const text = e.target?.result as string;
         if (type === 'attendance') {
             const { data: newParsedData, dateRange } = parseAttendanceCsv(text);
-            if (!dateRange) throw new Error("Não foi possível encontrar um período de datas válido no arquivo de atendimento.");
             const newFile: LoadedAttendanceFile = { name: file.name, content: text, dateRange: dateRange, parsedData: newParsedData };
             setLoadedAttendanceFiles(currentFiles => [...currentFiles, newFile]);
             toast({ title: "Arquivo de Atendimento Carregado", description: `Dados de "${file.name}" adicionados.` });
@@ -380,7 +391,7 @@ export default function SalesAnalyzer() {
         setAiSummary(null);
       })
       .finally(() => setIsAiLoading(false));
-  }, [activeData.combinedAttendanceCsv, activeData.combinedSalesCsv, activeData.combinedSalesCsv, activeData.displayDateRange, toast]);
+  }, [activeData.combinedAttendanceCsv, activeData.combinedSalesCsv, activeData.displayDateRange, toast]);
 
   const resetData = useCallback(() => {
     setLoadedAttendanceFiles([]);
@@ -595,5 +606,3 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
-
-    
