@@ -713,32 +713,30 @@ export default function SalesAnalyzer() {
                     <Card>
                         <CardHeader><CardTitle className="font-headline">Ranking de Desempenho</CardTitle><CardDescription>Análise consolidada por vendedor(a).</CardDescription></CardHeader>
                         <CardContent>
-                            <ScrollArea className="h-[300px]">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <SortableHeader tKey="salesperson" label="Vendedor(a)" />
-                                            <SortableHeader tKey="totalAttendances" label="Atend." className="text-right" />
-                                            <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
-                                            <SortableHeader tKey="conversionRate" label="Conversão" className="text-right" />
-                                            <SortableHeader tKey="totalRevenue" label="Receita" className="text-right" />
-                                            <SortableHeader tKey="averageTicket" label="Ticket" className="text-right" />
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <SortableHeader tKey="salesperson" label="Vendedor(a)" />
+                                        <SortableHeader tKey="totalAttendances" label="Atend." className="text-right" />
+                                        <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
+                                        <SortableHeader tKey="conversionRate" label="Conversão" className="text-right" />
+                                        <SortableHeader tKey="totalRevenue" label="Receita" className="text-right" />
+                                        <SortableHeader tKey="averageTicket" label="Ticket" className="text-right" />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
+                                        <TableRow key={item.salesperson}>
+                                            <TableCell className="font-medium">{item.salesperson}</TableCell>
+                                            <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                            <TableCell className="text-right">{item.salesCount}</TableCell>
+                                            <TableCell className="text-right font-bold text-primary">{(item.conversionRate * 100).toFixed(1)}%</TableCell>
+                                            <TableCell className="text-right font-bold text-accent">{item.totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                                            <TableCell className="text-right">{item.averageTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
                                         </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
-                                            <TableRow key={item.salesperson}>
-                                                <TableCell className="font-medium">{item.salesperson}</TableCell>
-                                                <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                                <TableCell className="text-right">{item.salesCount}</TableCell>
-                                                <TableCell className="text-right font-bold text-primary">{(item.conversionRate * 100).toFixed(1)}%</TableCell>
-                                                <TableCell className="text-right font-bold text-accent">{item.totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                                                <TableCell className="text-right">{item.averageTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                                            </TableRow>
-                                        )) : <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum dado para esta seleção.</TableCell></TableRow>}
-                                    </TableBody>
-                                </Table>
-                            </ScrollArea>
+                                    )) : <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum dado para esta seleção.</TableCell></TableRow>}
+                                </TableBody>
+                            </Table>
                         </CardContent>
                     </Card>
                 </div>
