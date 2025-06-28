@@ -13,7 +13,7 @@ import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-su
 import { useToast } from "@/hooks/use-toast";
 import { 
     UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
-    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog, FileDown
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog, FileDown, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -262,7 +262,11 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
 };
 
 
-function SalesAnalyzer() {
+type SortKey = keyof ConsolidatedData;
+type SortDirection = 'ascending' | 'descending';
+
+
+export default function SalesAnalyzer() {
   const [loadedAttendanceFiles, setLoadedAttendanceFiles] = useState<LoadedAttendanceFile[]>([]);
   const [loadedSalesFiles, setLoadedSalesFiles] = useState<LoadedSalesFile[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -279,6 +283,7 @@ function SalesAnalyzer() {
   const { toast } = useToast();
 
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'totalRevenue', direction: 'descending' });
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, type: 'attendance' | 'sales') => {
     const file = event.target.files?.[0];
@@ -486,9 +491,43 @@ function SalesAnalyzer() {
     return consolidatedData.filter(d => d.salesperson === selectedSalesperson);
   }, [consolidatedData, selectedSalesperson]);
   
+  const requestSort = (key: SortKey) => {
+    let direction: SortDirection = 'descending';
+    if (sortConfig.key === key && sortConfig.direction === 'descending') {
+      direction = 'ascending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
   const sortedDisplayData = useMemo(() => {
-    return [...displayData].sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [displayData]);
+    const sortableItems = [...displayData];
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+           if (aValue.toLowerCase() < bValue.toLowerCase()) {
+              return sortConfig.direction === 'ascending' ? -1 : 1;
+           }
+           if (aValue.toLowerCase() > bValue.toLowerCase()) {
+              return sortConfig.direction === 'ascending' ? 1 : -1;
+           }
+           return 0;
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+           if (aValue < bValue) {
+              return sortConfig.direction === 'ascending' ? -1 : 1;
+           }
+           if (aValue > bValue) {
+              return sortConfig.direction === 'ascending' ? 1 : -1;
+           }
+           return 0;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [displayData, sortConfig]);
   
   const totalAttendances = useMemo(() => displayData.reduce((sum, p) => sum + p.totalAttendances, 0), [displayData]);
   const totalSalesCount = useMemo(() => displayData.reduce((sum, p) => sum + p.salesCount, 0), [displayData]);
@@ -522,6 +561,20 @@ function SalesAnalyzer() {
       .sort((a, b) => b.receita - a.receita);
   }, [displayData]);
   
+  const SortableHeader = ({ tKey, label, className }: { tKey: SortKey, label: string, className?: string }) => {
+    const isActive = sortConfig.key === tKey;
+    const directionIcon = isActive ? (sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4 inline-block" /> : <ArrowDown className="ml-2 h-4 w-4 inline-block" />) : <ArrowUpDown className="ml-2 h-4 w-4 inline-block opacity-30 group-hover:opacity-100" />;
+
+    return (
+        <TableHead className={className}>
+            <Button variant="ghost" onClick={() => requestSort(tKey)} className="group p-0 h-auto font-bold w-full justify-start data-[align=right]:justify-end" data-align={className?.includes('text-right') ? 'right' : 'left'}>
+                {label}
+                {directionIcon}
+            </Button>
+        </TableHead>
+    )
+  };
+
   return (
     <div className="min-h-screen animate-in fade-in-50 bg-secondary/50">
       <header className="sticky top-0 z-30 bg-card shadow-sm">
@@ -661,7 +714,16 @@ function SalesAnalyzer() {
                         <CardContent>
                             <ScrollArea className="h-[300px]">
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>Vendedor(a)</TableHead><TableHead className="text-right">Atend.</TableHead><TableHead className="text-right">Vendas</TableHead><TableHead className="text-right">Conversão</TableHead><TableHead className="text-right">Receita</TableHead><TableHead className="text-right">Ticket Médio</TableHead></TableRow></TableHeader>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <SortableHeader tKey="salesperson" label="Vendedor(a)" />
+                                            <SortableHeader tKey="totalAttendances" label="Atend." className="text-right" />
+                                            <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
+                                            <SortableHeader tKey="conversionRate" label="Conversão" className="text-right" />
+                                            <SortableHeader tKey="totalRevenue" label="Receita" className="text-right" />
+                                            <SortableHeader tKey="averageTicket" label="Ticket Médio" className="text-right" />
+                                        </TableRow>
+                                    </TableHeader>
                                     <TableBody>
                                         {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
                                             <TableRow key={item.salesperson}>
@@ -725,5 +787,3 @@ function SalesAnalyzer() {
     </div>
   );
 }
-
-export default SalesAnalyzer;
