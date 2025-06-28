@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useMemo, useCallback } from 'react';
+import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-summary-flow';
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar, X, FileText, Loader2 } from 'lucide-react';
+import { UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar, X, FileText, Loader2, Sparkles, Zap, TrendingUp, CheckCircle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 
@@ -29,7 +31,9 @@ export default function SalesAnalyzer() {
   const [data, setData] = useState<SalespersonPerformance[]>([]);
   const [dateRange, setDateRange] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(Date.now());
+  const [aiSummary, setAiSummary] = useState<SalesSummaryOutput | null>(null);
   const { toast } = useToast();
 
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
@@ -43,6 +47,7 @@ export default function SalesAnalyzer() {
 
     reader.onload = (e) => {
       try {
+        setAiSummary(null);
         const text = e.target?.result as string;
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
         
@@ -140,8 +145,26 @@ export default function SalesAnalyzer() {
         setSelectedSalesperson('all');
         toast({
           title: "File Uploaded Successfully",
-          description: `Found data for ${parsedData.length} salespeople.`,
+          description: `Found data for ${parsedData.length} salespeople. Generating AI insights...`,
         });
+
+        setIsAiLoading(true);
+        const rawCsvForAI = lines.join('\n');
+        summarizeSalesData({ csvData: rawCsvForAI, dateRange: lines[0] })
+          .then(summary => {
+            setAiSummary(summary);
+          })
+          .catch(aiError => {
+            console.error("AI analysis failed:", aiError);
+            toast({
+              variant: "destructive",
+              title: "AI Analysis Failed",
+              description: "The AI could not generate insights for this data.",
+            });
+          })
+          .finally(() => {
+            setIsAiLoading(false);
+          });
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : "An unknown error occurred during parsing.";
         toast({
@@ -169,6 +192,7 @@ export default function SalesAnalyzer() {
     setData([]);
     setDateRange("");
     setSelectedSalesperson('all');
+    setAiSummary(null);
     setFileInputKey(Date.now());
   }, []);
 
@@ -181,6 +205,7 @@ export default function SalesAnalyzer() {
   
   const totalAttendances = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalAttendances, 0), [filteredData]);
   const totalPotentials = useMemo(() => filteredData.reduce((sum, p) => sum + p.totalPotentials, 0), [filteredData]);
+  const opportunityRatio = useMemo(() => totalAttendances > 0 ? (totalPotentials / totalAttendances) : 0, [totalAttendances, totalPotentials]);
 
   const hourlyTotals = useMemo(() => {
     const totals = new Map<number, { attendances: number, potentials: number }>();
@@ -210,7 +235,7 @@ export default function SalesAnalyzer() {
               <FileText className="w-10 h-10 text-primary" />
             </div>
             <CardTitle className="font-headline text-4xl mt-4">Sales Insights Analyzer</CardTitle>
-            <CardDescription className="text-lg">Upload your daily sales summary CSV to get started</CardDescription>
+            <CardDescription className="text-lg">Get AI-powered insights from your daily sales summary CSV</CardDescription>
           </CardHeader>
           <CardContent>
             <label htmlFor="file-upload" className="cursor-pointer group">
@@ -264,7 +289,7 @@ export default function SalesAnalyzer() {
             </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Attendances</CardTitle>
@@ -287,6 +312,16 @@ export default function SalesAnalyzer() {
             </Card>
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Opportunity Ratio</CardTitle>
+                    <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{opportunityRatio.toFixed(2)}</div>
+                    <p className="text-xs text-muted-foreground">Opportunities per attendance</p>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Date Range</CardTitle>
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
@@ -297,6 +332,51 @@ export default function SalesAnalyzer() {
             </Card>
         </div>
         
+        {isAiLoading && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 font-headline">
+                <Sparkles className="h-6 w-6 text-primary" />
+                AI-Powered Insights
+              </CardTitle>
+              <CardDescription>Our AI is analyzing your data to find key trends and recommendations...</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-[90%]" />
+              <div className="space-y-2 pt-4">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {aiSummary && !isAiLoading && (
+          <Card className="animate-in fade-in-50">
+             <CardHeader>
+                <CardTitle className="flex items-center gap-2 font-headline">
+                  <Sparkles className="h-6 w-6 text-primary" />
+                  AI-Powered Insights
+                </CardTitle>
+             </CardHeader>
+             <CardContent className="space-y-4 text-sm">
+                <p className="text-base leading-relaxed">{aiSummary.summary}</p>
+                <div className="grid md:grid-cols-2 gap-6 pt-4">
+                    <div>
+                        <h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5"/>Highlights</h3>
+                        <ul className="list-disc pl-5 space-y-1 text-muted-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5"/>Recommendations</h3>
+                        <ul className="list-disc pl-5 space-y-1 text-muted-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                    </div>
+                </div>
+             </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
             <Card className="lg:col-span-4">
                 <CardHeader>
@@ -333,6 +413,7 @@ export default function SalesAnalyzer() {
                                 <TableHead>Salesperson</TableHead>
                                 <TableHead className="text-right">Attendances</TableHead>
                                 <TableHead className="text-right">Potentials</TableHead>
+                                <TableHead className="text-right">Opp. Ratio</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -342,11 +423,12 @@ export default function SalesAnalyzer() {
                                     <TableRow key={item.salesperson}>
                                         <TableCell className="font-medium">{item.salesperson}</TableCell>
                                         <TableCell className="text-right font-bold text-primary">{item.totalAttendances}</TableCell>
-                                        <TableCell className="text-right font-bold text-accent">{item.totalPotentials}</TableCell>
+                                        <TableCell className="text-right">{item.totalPotentials}</TableCell>
+                                        <TableCell className="text-right">{(item.totalAttendances > 0 ? item.totalPotentials / item.totalAttendances : 0).toFixed(2)}</TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="h-24 text-center">No data for this selection.</TableCell>
+                                        <TableCell colSpan={4} className="h-24 text-center">No data for this selection.</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
