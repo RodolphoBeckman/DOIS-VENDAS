@@ -337,7 +337,7 @@ export default function SalesAnalyzer() {
         })
       : loadedAttendanceFiles;
 
-    const salesFilesToProcess = loadedSalesFiles; // Sales files are not filtered by date for now
+    const salesFilesToProcess = loadedSalesFiles; // Sales files are not filtered by date, as they lack date info.
 
     if (attendanceFilesToProcess.length === 0 && salesFilesToProcess.length === 0) {
         return { consolidatedData: [], combinedAttendanceCsv: '', combinedSalesCsv: '', displayDateRange: 'Nenhum dado para o período' };
@@ -346,9 +346,11 @@ export default function SalesAnalyzer() {
     const mergedPerformances = mergeAttendanceData(attendanceFilesToProcess.map(f => f.parsedData));
     const mergedSales = mergeSalesData(salesFilesToProcess.map(f => f.parsedData));
     
-    const allSalespeople = [...new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)])];
+    const salespeopleToShow = filterDateRange?.from
+        ? new Set(mergedPerformances.map(p => p.salesperson))
+        : new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)]);
 
-    const consolidatedData: ConsolidatedData[] = allSalespeople.map(name => {
+    const consolidatedData: ConsolidatedData[] = Array.from(salespeopleToShow).map(name => {
         const performanceData = mergedPerformances.find(p => p.salesperson === name);
         const salesData = mergedSales.find(s => s.salesperson === name);
 
@@ -371,9 +373,19 @@ export default function SalesAnalyzer() {
     const combinedAttendanceCsv = attendanceFilesToProcess.map(f => f.content).join('\n\n');
     const combinedSalesCsv = salesFilesToProcess.map(f => f.content).join('\n\n');
 
-    const dateRanges = attendanceFilesToProcess.map(f => f.content.split('\n')[0].trim());
-    const uniqueDateRanges = [...new Set(dateRanges)];
-    const displayDateRange = uniqueDateRanges.join(' & ') || 'Todos os Períodos Carregados';
+    let displayDateRange: string;
+    if (filterDateRange?.from) {
+        const startDate = format(filterDateRange.from, "dd/MM/yy", { locale: ptBR });
+        const endDate = filterDateRange.to ? format(filterDateRange.to, "dd/MM/yy", { locale: ptBR }) : null;
+        displayDateRange = endDate ? `${startDate} - ${endDate}` : startDate;
+    } else if (loadedAttendanceFiles.length > 0) {
+        const allDates = loadedAttendanceFiles.flatMap(f => [f.dateRange.start, f.dateRange.end]);
+        const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
+        const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
+        displayDateRange = `${format(minDate, "dd/MM/yyyy")} - ${format(maxDate, "dd/MM/yyyy")}`;
+    } else {
+        displayDateRange = 'Nenhum período de atendimento carregado';
+    }
 
     return { consolidatedData, combinedAttendanceCsv, combinedSalesCsv, displayDateRange };
 
@@ -747,18 +759,18 @@ export default function SalesAnalyzer() {
                     {aiSummary && !isAiLoading && (
                       <Card className="animate-in fade-in-50 sticky top-24">
                          <CardHeader><CardTitle className="flex items-center gap-2 font-headline"><Sparkles className="h-6 w-6 text-primary" />Insights com IA</CardTitle></CardHeader>
-                         <CardContent className="space-y-6 text-sm">
-                            <div><h3 className="font-semibold text-base mb-2">Resumo Geral</h3><p className="leading-relaxed text-foreground">{aiSummary.summary}</p></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2 text-foreground">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2 text-foreground">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+                         <CardContent className="space-y-6 text-sm text-foreground/90">
+                            <div><h3 className="font-semibold text-base mb-2 text-foreground">Resumo Geral</h3><p className="leading-relaxed">{aiSummary.summary}</p></div>
+                            <div><h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
+                            <div><h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
                             {aiSummary.individualHighlights && aiSummary.individualHighlights.length > 0 && (
                                 <div>
-                                    <h3 className="font-semibold flex items-center gap-2 mb-2"><Users className="h-5 w-5 text-primary"/>Destaques Individuais</h3>
+                                    <h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><Users className="h-5 w-5 text-primary"/>Destaques Individuais</h3>
                                     <div className="space-y-4 pt-2">
                                         {aiSummary.individualHighlights.map((item, index) => (
                                             <div key={index} className="border-t border-border/50 pt-3 first:border-t-0 first:pt-0">
                                                 <p className="font-semibold text-foreground">{item.salesperson}</p>
-                                                <p className="text-sm text-foreground mt-1">
+                                                <p className="text-sm mt-1">
                                                     {item.highlight}
                                                 </p>
                                             </div>
