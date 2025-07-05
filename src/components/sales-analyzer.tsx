@@ -328,27 +328,36 @@ export default function SalesAnalyzer() {
   }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const activeData = useMemo(() => {
+    // 1. Determine which attendance files are in the filtered date range.
     const attendanceFilesToProcess = filterDateRange?.from
       ? loadedAttendanceFiles.filter(file => {
           const fileInterval = { start: file.dateRange.start, end: file.dateRange.end };
           const filterInterval = { start: startOfDay(filterDateRange.from!), end: endOfDay(filterDateRange.to ?? filterDateRange.from!) };
+          // Check if file's date range overlaps with the filter's date range.
           return isWithinInterval(fileInterval.start, filterInterval) || isWithinInterval(fileInterval.end, filterInterval) || 
-                 (fileInterval.start < filterInterval.start && fileInterval.end > filterInterval.end);
+                 (fileInterval.start <= filterInterval.start && fileInterval.end >= filterInterval.end);
         })
       : loadedAttendanceFiles;
 
-    const salesFilesToProcess = loadedSalesFiles; // Sales files are not filtered by date, as they lack date info.
+    // 2. Merge all sales data once, it will be filtered later if needed.
+    const allMergedSales = mergeSalesData(loadedSalesFiles.map(f => f.parsedData));
 
-    if (attendanceFilesToProcess.length === 0 && salesFilesToProcess.length === 0) {
+    // Exit early if there are no files loaded at all.
+    if (loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0) {
         return { consolidatedData: [], combinedAttendanceCsv: '', combinedSalesCsv: '', displayDateRange: 'Nenhum dado para o período' };
     }
     
+    // 3. Merge performance data from ONLY the relevant attendance files.
     const mergedPerformances = mergeAttendanceData(attendanceFilesToProcess.map(f => f.parsedData));
-    const mergedSales = mergeSalesData(salesFilesToProcess.map(f => f.parsedData));
     
-    const salespeopleToShow = filterDateRange?.from
-        ? new Set(mergedPerformances.map(p => p.salesperson))
-        : new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)]);
+    // 4. Determine the final list of sales data. If filtering by date, use only sales from salespeople active in that period.
+    const activeSalespeopleInPeriod = new Set(mergedPerformances.map(p => p.salesperson));
+    const mergedSales = filterDateRange?.from
+        ? allMergedSales.filter(s => activeSalespeopleInPeriod.has(s.salesperson))
+        : allMergedSales;
+
+    // 5. The final list of salespeople is the union of the (filtered) performances and (filtered) sales.
+    const salespeopleToShow = new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)]);
 
     const consolidatedData: ConsolidatedData[] = Array.from(salespeopleToShow).map(name => {
         const performanceData = mergedPerformances.find(p => p.salesperson === name);
@@ -370,8 +379,9 @@ export default function SalesAnalyzer() {
         };
     });
     
+    // 6. Create combined CSVs for AI analysis.
     const combinedAttendanceCsv = attendanceFilesToProcess.map(f => f.content).join('\n\n');
-    const combinedSalesCsv = salesFilesToProcess.map(f => f.content).join('\n\n');
+    const combinedSalesCsv = loadedSalesFiles.map(f => f.content).join('\n\n');
 
     let displayDateRange: string;
     if (filterDateRange?.from) {
@@ -770,7 +780,7 @@ export default function SalesAnalyzer() {
                                         {aiSummary.individualHighlights.map((item, index) => (
                                             <div key={index} className="border-t border-border/50 pt-3 first:border-t-0 first:pt-0">
                                                 <p className="font-semibold text-foreground">{item.salesperson}</p>
-                                                <p className="text-sm mt-1">
+                                                <p className="text-sm mt-1 text-foreground/80">
                                                     {item.highlight}
                                                 </p>
                                             </div>
