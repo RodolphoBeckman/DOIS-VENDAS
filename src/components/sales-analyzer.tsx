@@ -364,12 +364,15 @@ export default function SalesAnalyzer() {
         const margin = 10;
         const availableWidth = pdfWidth - (margin * 2);
 
-        // Process Right Column (summary cards) first
+        // Process Right Column (summary cards)
         const rightCanvas = await html2canvas(rightColumnEl, { scale: 2, backgroundColor: null });
         const rightImgData = rightCanvas.toDataURL('image/png');
         const rightImgProps = pdf.getImageProperties(rightImgData);
         const rightImgWidth = availableWidth * 0.33; // Approx 1/3 of the page
         const rightImgHeight = (rightImgProps.height * rightImgWidth) / rightImgProps.width;
+        
+        // Add right column to the first page
+        pdf.addImage(rightImgData, 'PNG', pdfWidth - rightImgWidth - margin, margin, rightImgWidth, rightImgHeight);
         
         // Process Left Column (main table)
         const leftCanvas = await html2canvas(leftColumnEl, { scale: 2, backgroundColor: null });
@@ -378,20 +381,20 @@ export default function SalesAnalyzer() {
         const leftImgWidth = availableWidth * 0.65; // Approx 2/3 of the page
         const leftImgHeight = (leftImgProps.height * leftImgWidth) / leftImgProps.width;
         
-        // Add images to the first page
-        pdf.addImage(rightImgData, 'PNG', pdfWidth - rightImgWidth - margin, margin, rightImgWidth, rightImgHeight);
-        
         let heightLeft = leftImgHeight;
         let position = 0;
         
+        // Add first part of the left column
         pdf.addImage(leftImgData, 'PNG', margin, margin, leftImgWidth, leftImgHeight);
         heightLeft -= (pdfHeight - (margin * 2));
         
+        // Add new pages if left column is too long
         while (heightLeft > 0) {
-            position = heightLeft - leftImgHeight;
+            position = heightLeft - leftImgHeight; // Recalculate position
             pdf.addPage();
-            pdf.addImage(leftImgData, 'PNG', margin, position + margin, leftImgWidth, leftImgHeight);
-            heightLeft -= (pdfHeight - margin);
+            // Important: Use the same image data but clip it with the y-position
+            pdf.addImage(leftImgData, 'PNG', margin, position, leftImgWidth, leftImgHeight);
+            heightLeft -= pdfHeight;
         }
 
         pdf.save('relatorio-de-vendas.pdf');
@@ -666,36 +669,7 @@ export default function SalesAnalyzer() {
                           </Table>
                       </CardContent>
                   </Card>
-              </div>
-
-              {/* Coluna Direita */}
-              <div ref={rightColumnRef} className="space-y-6">
-                  <Card>
-                      <CardHeader>
-                          <CardTitle className="flex items-center gap-2 font-headline text-lg">
-                              <Folder className="text-primary"/>
-                              Arquivos Carregados
-                          </CardTitle>
-                      </CardHeader>
-                      <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          {loadedAttendanceFiles.map(file => (
-                              <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
-                                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                                  <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
-                                  <p className="text-xs text-green-600">Atendimento</p>
-                              </div>
-                          ))}
-                          {loadedSalesFiles.map(file => (
-                              <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
-                                  <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                                  <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
-                                  <p className="text-xs text-blue-600">Vendas</p>
-                              </div>
-                          ))}
-                      </CardContent>
-                  </Card>
-
-                  {(isAiLoading || aiSummary) && (
+                   {(isAiLoading || aiSummary) && (
                     <Card>
                       <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Sparkles className="text-accent" />Insights da IA</CardTitle></CardHeader>
                       <CardContent className="space-y-3">
@@ -716,6 +690,48 @@ export default function SalesAnalyzer() {
                       </CardContent>
                     </Card>
                   )}
+
+                  {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
+                    <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
+                      <CardContent className="space-y-3">
+                        {aiSummary.recommendations.map((rec, i) => (
+                          <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
+                            <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
+                            <p>{rec}</p>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+              </div>
+
+              {/* Coluna Direita */}
+              <div ref={rightColumnRef} className="space-y-6">
+                  <Card>
+                      <CardHeader>
+                          <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                              <Folder className="text-primary"/>
+                              Arquivos Carregados
+                          </CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4">
+                          {loadedAttendanceFiles.map(file => (
+                              <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
+                                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                  <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
+                                  <p className="text-xs text-green-600">Atendimento</p>
+                              </div>
+                          ))}
+                          {loadedSalesFiles.map(file => (
+                              <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
+                                  <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                                  <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
+                                  <p className="text-xs text-blue-600">Vendas</p>
+                              </div>
+                          ))}
+                      </CardContent>
+                  </Card>
                   
                   <Card>
                       <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><BarChartIcon className="text-primary"/>Estatísticas</CardTitle></CardHeader>
@@ -758,20 +774,6 @@ export default function SalesAnalyzer() {
                           })}
                       </CardContent>
                   </Card>
-
-                  {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
-                    <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
-                      <CardContent className="space-y-3">
-                        {aiSummary.recommendations.map((rec, i) => (
-                          <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
-                            <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
-                            <p>{rec}</p>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
               </div>
           </div>
           )}
@@ -780,6 +782,8 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
 
     
 
