@@ -150,8 +150,9 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
         const rawSalesperson = values[0];
+        if (!rawSalesperson) continue;
         const lowerRawSalesperson = rawSalesperson.toLowerCase();
-        if (!rawSalesperson || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || rawSalesperson.startsWith('Data')) continue;
+        if (lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || lowerRawSalesperson.startsWith('data')) continue;
         const salesperson = cleanSalespersonName(rawSalesperson);
         if (!salesperson) continue;
         const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
@@ -171,7 +172,7 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
         const totalPotentials = hourly.reduce((sum, h) => sum + h.potentials, 0);
         parsedData.push({ salesperson, hourly, totalAttendances, totalPotentials });
     }
-    if (parsedData.length === 0) throw new Error("Nenhum dado de atendimento válido encontrado.");
+    if (parsedData.length === 0) throw new Error("Nenhum dado de atendimento válido foi encontrado no arquivo.");
     return { data: parsedData, dateRange };
 };
 
@@ -195,8 +196,9 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         const values = row.split(';').map(v => v.trim());
         if (values.length < 11) continue;
         const rawSalespersonName = values[0];
-        const lowerRawSalesperson = rawSalespersonName?.toLowerCase();
-        if (!rawSalespersonName || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || lowerRawSalesperson.startsWith('data')) continue;
+        if (!rawSalespersonName) continue;
+        const lowerRawSalesperson = rawSalespersonName.toLowerCase();
+        if (lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || lowerRawSalesperson.startsWith('data')) continue;
         const salesperson = cleanSalespersonName(rawSalespersonName);
         if (!salesperson) continue;
 
@@ -208,7 +210,7 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
             averageTicket: parseCurrency(values[10]),
         });
     }
-    if (parsedData.length === 0) throw new Error("Nenhum dado de vendas válido encontrado.");
+    if (parsedData.length === 0) throw new Error("Nenhum dado de vendas válido foi encontrado no arquivo.");
     return parsedData;
 };
 
@@ -274,6 +276,8 @@ export default function SalesAnalyzer() {
   const { toast } = useToast();
 
   const printRef = useRef<HTMLDivElement>(null);
+  const mainTableRef = useRef<HTMLDivElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'conversionRate', direction: 'descending' });
 
@@ -292,13 +296,12 @@ export default function SalesAnalyzer() {
             reader.onload = (e) => {
                 try {
                     const text = e.target?.result as string;
-                    // Heurística para arquivo de atendimento: contém "At.;Pot."
                     if (text.includes('At.;Pot.')) {
                         if (!loadedAttendanceFiles.some(f => f.name === file.name)) {
                             const { data, dateRange } = parseAttendanceCsv(text);
                             newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
                         }
-                    } else { // Assume que é arquivo de vendas
+                    } else {
                          if (!loadedSalesFiles.some(f => f.name === file.name)) {
                             const data = parseSalesCsv(text);
                             newSalesFiles.push({ name: file.name, content: text, parsedData: data });
@@ -337,8 +340,10 @@ export default function SalesAnalyzer() {
 }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const handleGeneratePdf = useCallback(async () => {
-    const element = printRef.current;
-    if (!element) {
+    const mainTableEl = mainTableRef.current;
+    const rightColumnEl = rightColumnRef.current;
+
+    if (!mainTableEl || !rightColumnEl) {
         toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Não foi possível encontrar o conteúdo para imprimir." });
         return;
     }
@@ -346,27 +351,65 @@ export default function SalesAnalyzer() {
     setIsGeneratingPdf(true);
 
     try {
-        const canvas = await html2canvas(element, {
-            scale: 2, // Aumenta a resolução da imagem
-            backgroundColor: null, // Usa o fundo do elemento
-        });
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+        let yPos = margin;
 
+        const addElementToPdf = async (element: HTMLElement) => {
+            const canvas = await html2canvas(element, { scale: 2, backgroundColor: null });
+            const imgData = canvas.toDataURL('image/png');
+            const imgHeight = (canvas.height * (pdfWidth - margin * 2)) / canvas.width;
+
+            if (yPos + imgHeight > pdfHeight - margin) {
+                pdf.addPage();
+                yPos = margin;
+            }
+
+            pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight);
+            yPos += imgHeight + 10;
+        };
+
+        // Renderiza a coluna da direita primeiro
+        await addElementToPdf(rightColumnEl);
+        
+        // Agora, renderiza a tabela principal, com paginação
+        const canvas = await html2canvas(mainTableEl, { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'px',
-            format: [canvas.width, canvas.height]
-        });
+        const imgHeight = (canvas.height * (pdfWidth - margin * 2)) / canvas.width;
+        
+        let heightLeft = imgHeight;
+        let tableYPos = 0;
 
-        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        // Adiciona a primeira parte da tabela
+        if (yPos + Math.min(heightLeft, pdfHeight - margin - yPos) > pdfHeight - margin) {
+            pdf.addPage();
+            yPos = margin;
+        }
+        pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight, undefined, 'FAST', tableYPos);
+
+        heightLeft -= (pdfHeight - yPos - margin);
+        tableYPos += (pdfHeight - yPos - margin) * (canvas.width / (pdfWidth - margin * 2));
+
+        // Adiciona o restante em novas páginas, se necessário
+        while (heightLeft > 0) {
+            pdf.addPage();
+            yPos = margin;
+            pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight, undefined, 'FAST', tableYPos);
+            heightLeft -= pdfHeight - margin * 2;
+            tableYPos += (pdfHeight - margin * 2) * (canvas.width / (pdfWidth - margin * 2));
+        }
+
         pdf.save('relatorio-de-vendas.pdf');
+
     } catch (error) {
         console.error("Erro ao gerar PDF:", error);
         toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Ocorreu um problema ao tentar criar o arquivo PDF." });
     } finally {
         setIsGeneratingPdf(false);
     }
-  }, [toast]);
+}, [toast]);
   
   const activeData = useMemo(() => {
     const attendanceData = mergeAttendanceData(loadedAttendanceFiles.map(f => f.parsedData));
@@ -513,222 +556,226 @@ export default function SalesAnalyzer() {
 
   return (
     <div className="min-h-screen w-full p-4 sm:p-6 md:p-8 bg-secondary/80">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <h1 className="font-headline text-3xl font-bold text-foreground flex items-center gap-3">
-                <BarChartIcon className="text-accent"/>
-                Planilha Inteligente
-            </h1>
-            <p className="text-muted-foreground mt-1">Análise automática com IA • Insights em tempo real</p>
-        </div>
-        <div className="flex items-center gap-2">
-            <label htmlFor="file-upload" className="cursor-pointer">
-                <Button asChild variant="outline" className="bg-white">
-                    <span>
-                        <UploadCloud className="mr-2 text-primary" />
-                        Upload Arquivos
-                    </span>
-                </Button>
-                <input id="file-upload" key={fileInputKey} type="file" className="hidden" accept=".csv,.txt" onChange={handleFileUpload} multiple disabled={isLoading}/>
-            </label>
-            <Button onClick={runAiAnalysis} disabled={isAiLoading || !hasFiles} className="bg-accent hover:bg-accent/90">
-                {isAiLoading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
-                Gerar Insights
-            </Button>
-             <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf || !hasFiles} variant="outline" className="bg-white">
-                {isGeneratingPdf ? <Loader2 className="mr-2 animate-spin" /> : <FileDown className="mr-2" />}
-                Exportar PDF
-            </Button>
-        </div>
-      </header>
-      
-      <main ref={printRef} className="space-y-6">
-        {isLoading && (<div className="flex items-center justify-center text-primary rounded-lg bg-card p-4"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivos...</span></div>)}
+      <div ref={printRef}>
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+              <h1 className="font-headline text-3xl font-bold text-foreground flex items-center gap-3">
+                  <BarChartIcon className="text-accent"/>
+                  Planilha Inteligente
+              </h1>
+              <p className="text-muted-foreground mt-1">Análise automática com IA • Insights em tempo real</p>
+          </div>
+          <div className="flex items-center gap-2">
+              <label htmlFor="file-upload" className="cursor-pointer">
+                  <Button asChild variant="outline" className="bg-white">
+                      <span>
+                          <UploadCloud className="mr-2 text-primary" />
+                          Upload Arquivos
+                      </span>
+                  </Button>
+                  <input id="file-upload" key={fileInputKey} type="file" className="hidden" accept=".csv,.txt" onChange={handleFileUpload} multiple disabled={isLoading}/>
+              </label>
+              <Button onClick={runAiAnalysis} disabled={isAiLoading || !hasFiles} className="bg-accent hover:bg-accent/90">
+                  {isAiLoading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
+                  Gerar Insights
+              </Button>
+              <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf || !hasFiles} variant="outline" className="bg-white">
+                  {isGeneratingPdf ? <Loader2 className="mr-2 animate-spin" /> : <FileDown className="mr-2" />}
+                  Exportar PDF
+              </Button>
+          </div>
+        </header>
         
-        {!hasFiles && !isLoading && (
-            <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
-                <CardHeader>
-                    <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit"><HelpCircle className="w-10 h-10 text-primary" /></div>
-                    <CardTitle className="font-headline text-3xl mt-4">Bem-vindo à Planilha Inteligente</CardTitle>
-                    <CardDescription>Para começar, clique em <span className="font-semibold text-primary">"Upload Arquivos"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
-                </CardHeader>
-            </Card>
-        )}
+        <main className="space-y-6">
+          {isLoading && (<div className="flex items-center justify-center text-primary rounded-lg bg-card p-4"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivos...</span></div>)}
+          
+          {!hasFiles && !isLoading && (
+              <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
+                  <CardHeader>
+                      <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit"><HelpCircle className="w-10 h-10 text-primary" /></div>
+                      <CardTitle className="font-headline text-3xl mt-4">Bem-vindo à Planilha Inteligente</CardTitle>
+                      <CardDescription>Para começar, clique em <span className="font-semibold text-primary">"Upload Arquivos"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
+                  </CardHeader>
+              </Card>
+          )}
 
-        {hasFiles && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50">
-            {/* Coluna Esquerda */}
-            <div className="lg:col-span-2 space-y-6">
-                {activeData.displayDateRange && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 font-headline text-lg">
-                                <CalendarIcon className="text-primary"/>
-                                Período da Análise
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex items-center gap-4 text-center">
-                            <div>
-                                <p className="text-sm text-muted-foreground">Data Inicial</p>
-                                <p className="font-bold text-lg">{format(activeData.displayDateRange.start, "dd/MM/yyyy")}</p>
-                            </div>
-                            <div className="text-muted-foreground">→</div>
-                             <div>
-                                <p className="text-sm text-muted-foreground">Data Final</p>
-                                <p className="font-bold text-lg">{format(activeData.displayDateRange.end, "dd/MM/yyyy")}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
-                            <Target className="text-primary"/>
-                            Taxa de Conversão por Vendedora
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <SortableHeader tKey="salesperson" label="Vendedora" />
-                                    <SortableHeader tKey="totalAttendances" label="Atendimentos" className="text-right" />
-                                    <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
-                                    <SortableHeader tKey="conversionRate" label="Conversão (%)" className="text-right" />
-                                    <SortableHeader tKey="totalRevenue" label="Receita (R$)" className="text-right" />
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedDisplayData.length > 0 ? sortedDisplayData.map((item) => (
-                                    <TableRow key={item.salesperson} className="text-sm">
-                                        <TableCell className="font-medium">
-                                            {item.salesperson}
-                                        </TableCell>
-                                        <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                        <TableCell className="text-right">{item.salesCount}</TableCell>
-                                        <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
-                                          <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
-                                            {(item.conversionRate * 100).toFixed(1)}%
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                    </TableRow>
-                                )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Coluna Direita */}
-            <div className="space-y-6">
-                 <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
-                            <Folder className="text-primary"/>
-                            Arquivos Carregados
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {loadedAttendanceFiles.map(file => (
-                            <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
-                                <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                                <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
-                                <p className="text-xs text-green-600">Atendimento</p>
-                            </div>
-                        ))}
-                        {loadedSalesFiles.map(file => (
-                            <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
-                                <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                                <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
-                                <p className="text-xs text-blue-600">Vendas</p>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-
-                {(isAiLoading || aiSummary) && (
+          {hasFiles && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50">
+              {/* Coluna Esquerda */}
+              <div ref={mainTableRef} className="lg:col-span-2 space-y-6">
+                  {activeData.displayDateRange && (
+                      <Card>
+                          <CardHeader>
+                              <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                                  <CalendarIcon className="text-primary"/>
+                                  Período da Análise
+                              </CardTitle>
+                          </CardHeader>
+                          <CardContent className="flex items-center gap-4 text-center">
+                              <div>
+                                  <p className="text-sm text-muted-foreground">Data Inicial</p>
+                                  <p className="font-bold text-lg">{format(activeData.displayDateRange.start, "dd/MM/yyyy")}</p>
+                              </div>
+                              <div className="text-muted-foreground">→</div>
+                              <div>
+                                  <p className="text-sm text-muted-foreground">Data Final</p>
+                                  <p className="font-bold text-lg">{format(activeData.displayDateRange.end, "dd/MM/yyyy")}</p>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  )}
                   <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Sparkles className="text-accent" />Insights da IA</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      {isAiLoading ? (
-                        <>
-                          <Skeleton className="h-8 w-full" />
-                          <Skeleton className="h-8 w-5/6" />
-                          <Skeleton className="h-8 w-full" />
-                        </>
-                      ) : aiSummary ? (
-                        aiSummary.highlights.map((h, i) => (
-                          <div key={i} className="flex items-start gap-3 text-sm p-2 rounded-lg bg-yellow-50 border border-yellow-200">
-                            <Lightbulb className="w-4 h-4 mt-1 shrink-0 text-yellow-600"/>
-                            <p className="text-yellow-800">{h}</p>
+                      <CardHeader>
+                          <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                              <Target className="text-primary"/>
+                              Taxa de Conversão por Vendedora
+                          </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                          <Table>
+                              <TableHeader>
+                                  <TableRow>
+                                      <SortableHeader tKey="salesperson" label="Vendedora" />
+                                      <SortableHeader tKey="totalAttendances" label="Atendimentos" className="text-right" />
+                                      <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
+                                      <SortableHeader tKey="conversionRate" label="Conversão (%)" className="text-right" />
+                                      <SortableHeader tKey="totalRevenue" label="Receita (R$)" className="text-right" />
+                                  </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                  {sortedDisplayData.length > 0 ? sortedDisplayData.map((item) => (
+                                      <TableRow key={item.salesperson} className="text-sm">
+                                          <TableCell className="font-medium">
+                                              {item.salesperson}
+                                          </TableCell>
+                                          <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                          <TableCell className="text-right">{item.salesCount}</TableCell>
+                                          <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
+                                            <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                              {(item.conversionRate * 100).toFixed(1)}%
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                      </TableRow>
+                                  )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
+                              </TableBody>
+                          </Table>
+                      </CardContent>
+                  </Card>
+              </div>
+
+              {/* Coluna Direita */}
+              <div ref={rightColumnRef} className="space-y-6">
+                  <Card>
+                      <CardHeader>
+                          <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                              <Folder className="text-primary"/>
+                              Arquivos Carregados
+                          </CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                          {loadedAttendanceFiles.map(file => (
+                              <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
+                                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                  <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
+                                  <p className="text-xs text-green-600">Atendimento</p>
+                              </div>
+                          ))}
+                          {loadedSalesFiles.map(file => (
+                              <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
+                                  <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                                  <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
+                                  <p className="text-xs text-blue-600">Vendas</p>
+                              </div>
+                          ))}
+                      </CardContent>
+                  </Card>
+
+                  {(isAiLoading || aiSummary) && (
+                    <Card>
+                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Sparkles className="text-accent" />Insights da IA</CardTitle></CardHeader>
+                      <CardContent className="space-y-3">
+                        {isAiLoading ? (
+                          <>
+                            <Skeleton className="h-8 w-full" />
+                            <Skeleton className="h-8 w-5/6" />
+                            <Skeleton className="h-8 w-full" />
+                          </>
+                        ) : aiSummary ? (
+                          aiSummary.highlights.map((h, i) => (
+                            <div key={i} className="flex items-start gap-3 text-sm p-2 rounded-lg bg-yellow-50 border border-yellow-200">
+                              <Lightbulb className="w-4 h-4 mt-1 shrink-0 text-yellow-600"/>
+                              <p className="text-yellow-800">{h}</p>
+                            </div>
+                          ))
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  <Card>
+                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><BarChartIcon className="text-primary"/>Estatísticas</CardTitle></CardHeader>
+                      <CardContent className="space-y-4 text-sm">
+                          <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Taxa Média de Conversão:</span>
+                              <span className="font-bold text-lg text-primary">{(averageConversionRate * 100).toFixed(1)}%</span>
                           </div>
-                        ))
-                      ) : null}
-                    </CardContent>
+                          <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Total de Atendimentos:</span>
+                              <span className="font-bold text-lg text-primary">{totalAttendances}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Melhor Vendedora:</span>
+                              <span className="font-bold text-lg text-accent">{bestSalesperson?.salesperson.split(' ')[0] ?? 'N/A'}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Faturamento Total:</span>
+                              <span className="font-bold text-lg text-green-600">{totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                          </div>
+                      </CardContent>
                   </Card>
-                )}
-                
-                <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><BarChartIcon className="text-primary"/>Estatísticas</CardTitle></CardHeader>
-                    <CardContent className="space-y-4 text-sm">
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Taxa Média de Conversão:</span>
-                            <span className="font-bold text-lg text-primary">{(averageConversionRate * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Total de Atendimentos:</span>
-                            <span className="font-bold text-lg text-primary">{totalAttendances}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Melhor Vendedora:</span>
-                            <span className="font-bold text-lg text-accent">{bestSalesperson?.salesperson.split(' ')[0] ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Faturamento Total:</span>
-                            <span className="font-bold text-lg text-green-600">{totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                        </div>
-                    </CardContent>
-                </Card>
 
-                <Card className="bg-gradient-to-br from-pink-400 to-rose-400 text-white">
-                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><TrendingUp/>Taxa de Conversão por Vendedora</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        {conversionChartData.map(item => {
-                            const rankColor = item.rank === 1 ? 'text-yellow-300' : item.rank === 2 ? 'text-gray-300' : item.rank === 3 ? 'text-yellow-500' : '';
-                            return (
-                                <div key={item.name}>
-                                    <div className="flex justify-between items-center text-sm mb-1">
-                                        <span className="flex items-center gap-2">
-                                            {item.rank <= 3 && <Trophy className={`w-5 h-5 ${rankColor}`} />}
-                                            {item.name}
-                                        </span>
-                                        <span>{item.value}%</span>
-                                    </div>
-                                    <Progress value={item.value} className="h-2 bg-white/30" indicatorClassName="bg-white"/>
-                                </div>
-                            );
-                        })}
-                    </CardContent>
-                </Card>
-
-                {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
-                  <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      {aiSummary.recommendations.map((rec, i) => (
-                        <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
-                          <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
-                          <p>{rec}</p>
-                        </div>
-                      ))}
-                    </CardContent>
+                  <Card className="bg-gradient-to-br from-pink-400 to-rose-400 text-white">
+                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><TrendingUp/>Taxa de Conversão por Vendedora</CardTitle></CardHeader>
+                      <CardContent className="space-y-4">
+                          {conversionChartData.map((item, index) => {
+                              const rankColor = index === 0 ? 'text-yellow-300' : index === 1 ? 'text-gray-300' : index === 2 ? 'text-yellow-500' : '';
+                              return (
+                                  <div key={item.name}>
+                                      <div className="flex justify-between items-center text-sm mb-1">
+                                          <span className="flex items-center gap-2">
+                                              {index < 3 && <Trophy className={`w-5 h-5 ${rankColor}`} />}
+                                              {item.name}
+                                          </span>
+                                          <span>{item.value}%</span>
+                                      </div>
+                                      <Progress value={item.value} className="h-2 bg-white/30" indicatorClassName="bg-white"/>
+                                  </div>
+                              );
+                          })}
+                      </CardContent>
                   </Card>
-                )}
-            </div>
-        </div>
-        )}
-      </main>
+
+                  {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
+                    <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                      <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
+                      <CardContent className="space-y-3">
+                        {aiSummary.recommendations.map((rec, i) => (
+                          <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
+                            <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
+                            <p>{rec}</p>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+              </div>
+          </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
+
+    
