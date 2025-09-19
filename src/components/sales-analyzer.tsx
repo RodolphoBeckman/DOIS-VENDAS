@@ -64,8 +64,9 @@ type ConsolidatedData = SalespersonPerformance & SalespersonSales & {
 
 const cleanSalespersonName = (name: string): string => {
     if (!name) return '';
-    return name
-        .replace(/^\d+-\d+\s+/, '') // Remove prefix like "1-7 "
+    // This regex now correctly handles names that may or may not have the prefix.
+    const nameWithoutPrefix = name.replace(/^\d+-\d+\s+/, ''); 
+    return nameWithoutPrefix
         .replace(/\s*\([^)]+\)$/, '') // Remove suffix like " (FUNCIONARIO)"
         .trim();
 };
@@ -189,7 +190,6 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const dataRows = lines.slice(1);
     const parseCurrency = (str: string) => parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
     const parseIntSimple = (str: string) => parseInt(str, 10) || 0;
-    const parseFloatSimple = (str: string) => parseFloat(str.replace(',', '.')) || 0;
     
     const parsedData: SalespersonSales[] = [];
     for (const row of dataRows) {
@@ -291,6 +291,7 @@ export default function SalesAnalyzer() {
     if (!files || files.length === 0) return;
 
     setIsLoading(true);
+    setAiSummary(null); // Limpa a análise anterior ao carregar novos arquivos
     const newAttendanceFiles: LoadedAttendanceFile[] = [];
     const newSalesFiles: LoadedSalesFile[] = [];
     const errors: string[] = [];
@@ -439,19 +440,24 @@ export default function SalesAnalyzer() {
     const combineCsvContent = (files: {content: string}[], isAttendance: boolean): string => {
         if (files.length === 0) return '';
         
-        const headerLines = isAttendance ? 3 : 1;
+        const headerLineCount = isAttendance ? 3 : 1;
         const firstFileLines = files[0].content.split(/\r?\n/);
-        const header = firstFileLines.slice(0, headerLines).join('\n');
+        const header = firstFileLines.slice(0, headerLineCount).join('\n');
         
-        const allDataRows: string[] = [];
-        
-        files.forEach((file, index) => {
+        const allDataRows = files.flatMap((file, index) => {
             const lines = file.content.split(/\r?\n/);
-            const dataRows = lines.slice(headerLines);
-            allDataRows.push(...dataRows);
+            // For the first file, take data rows after header. For subsequent files, do the same.
+            const dataRows = lines.slice(headerLineCount);
+            return dataRows.filter(row => row.trim() !== ''); // Filter out empty lines
         });
 
-        return [header, ...allDataRows].join('\n');
+        // Filter out any row that could be a header
+        const filteredDataRows = allDataRows.filter(row => {
+            const lowerRow = row.toLowerCase();
+            return !lowerRow.includes('vendedor;') && !lowerRow.includes('at.;pot.');
+        });
+
+        return [header, ...filteredDataRows].join('\n');
     };
 
     const combinedAttendanceCsv = combineCsvContent(loadedAttendanceFiles, true);
