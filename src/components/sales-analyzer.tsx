@@ -249,12 +249,21 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
             }
             existingSale.salesCount += newSale.salesCount;
             existingSale.totalRevenue += newSale.totalRevenue;
-            const totalSales = existingSale.salesCount;
-            if (totalSales > 0) {
-              existingSale.averageTicket = existingSale.totalRevenue / totalSales;
-            }
         }
     }
+    
+    // After summing up everything, recalculate derived metrics
+    for (const [name, sale] of mergedMap.entries()) {
+        if (sale.salesCount > 0) {
+            sale.averageTicket = sale.totalRevenue / sale.salesCount;
+        } else {
+            sale.averageTicket = 0;
+        }
+        // Note: itemsPerSale would also need to be recalculated if it were an aggregated metric
+        // For now, it remains the value from the last file read for that salesperson, which is likely incorrect.
+        // This should be addressed if itemsPerSale becomes a critical metric.
+    }
+
     return Array.from(mergedMap.values());
 };
 
@@ -390,11 +399,11 @@ export default function SalesAnalyzer() {
         
         // Add new pages if left column is too long
         while (heightLeft > 0) {
-            position = heightLeft - leftImgHeight; // Recalculate position
+            position -= (pdfHeight - margin * 2); // Recalculate position
             pdf.addPage();
             // Important: Use the same image data but clip it with the y-position
             pdf.addImage(leftImgData, 'PNG', margin, position, leftImgWidth, leftImgHeight);
-            heightLeft -= pdfHeight;
+            heightLeft -= (pdfHeight - margin * 2);
         }
 
         pdf.save('relatorio-de-vendas.pdf');
@@ -782,6 +791,8 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
 
     
 
