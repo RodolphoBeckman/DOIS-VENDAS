@@ -347,10 +347,10 @@ export default function SalesAnalyzer() {
 }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const handleGeneratePdf = useCallback(async () => {
-    const mainTableEl = mainTableRef.current;
+    const leftColumnEl = mainTableRef.current;
     const rightColumnEl = rightColumnRef.current;
 
-    if (!mainTableEl || !rightColumnEl) {
+    if (!leftColumnEl || !rightColumnEl) {
         toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Não foi possível encontrar o conteúdo para imprimir." });
         return;
     }
@@ -362,50 +362,37 @@ export default function SalesAnalyzer() {
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
         const margin = 10;
-        let yPos = margin;
+        const availableWidth = pdfWidth - (margin * 2);
 
-        const addElementToPdf = async (element: HTMLElement, pageBreak = false) => {
-            const canvas = await html2canvas(element, { scale: 2, backgroundColor: null });
-            const imgData = canvas.toDataURL('image/png');
-            const imgProps = pdf.getImageProperties(imgData);
-            const imgWidth = pdfWidth - margin * 2;
-            const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-
-            if (pageBreak || (yPos + imgHeight > pdfHeight - margin)) {
-                pdf.addPage();
-                yPos = margin;
-            }
-
-            pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
-            yPos += imgHeight + 5; 
-        };
+        // Process Right Column (summary cards) first
+        const rightCanvas = await html2canvas(rightColumnEl, { scale: 2, backgroundColor: null });
+        const rightImgData = rightCanvas.toDataURL('image/png');
+        const rightImgProps = pdf.getImageProperties(rightImgData);
+        const rightImgWidth = availableWidth * 0.33; // Approx 1/3 of the page
+        const rightImgHeight = (rightImgProps.height * rightImgWidth) / rightImgProps.width;
         
-        await addElementToPdf(rightColumnEl);
+        // Process Left Column (main table)
+        const leftCanvas = await html2canvas(leftColumnEl, { scale: 2, backgroundColor: null });
+        const leftImgData = leftCanvas.toDataURL('image/png');
+        const leftImgProps = pdf.getImageProperties(leftImgData);
+        const leftImgWidth = availableWidth * 0.65; // Approx 2/3 of the page
+        const leftImgHeight = (leftImgProps.height * leftImgWidth) / leftImgProps.width;
         
-        const canvas = await html2canvas(mainTableEl, { scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = pdf.getImageProperties(imgData);
-        const tableImgWidth = pdfWidth - margin * 2;
-        const tableImgHeight = (imgProps.height * tableImgWidth) / imgProps.width;
-
-        let heightLeft = tableImgHeight;
+        // Add images to the first page
+        pdf.addImage(rightImgData, 'PNG', pdfWidth - rightImgWidth - margin, margin, rightImgWidth, rightImgHeight);
+        
+        let heightLeft = leftImgHeight;
         let position = 0;
-
-        if (yPos + heightLeft > pdfHeight - margin) {
-            pdf.addPage();
-            yPos = margin;
-        }
-
-        pdf.addImage(imgData, 'PNG', margin, yPos, tableImgWidth, tableImgHeight);
-        heightLeft -= (pdfHeight - yPos);
-
+        
+        pdf.addImage(leftImgData, 'PNG', margin, margin, leftImgWidth, leftImgHeight);
+        heightLeft -= (pdfHeight - (margin * 2));
+        
         while (heightLeft > 0) {
-            position += (pdfHeight - yPos);
+            position = heightLeft - leftImgHeight;
             pdf.addPage();
-            pdf.addImage(imgData, 'PNG', margin, 10, tableImgWidth, tableImgHeight);
-            heightLeft -= pdfHeight;
+            pdf.addImage(leftImgData, 'PNG', margin, position + margin, leftImgWidth, leftImgHeight);
+            heightLeft -= (pdfHeight - margin);
         }
-
 
         pdf.save('relatorio-de-vendas.pdf');
 
@@ -649,21 +636,32 @@ export default function SalesAnalyzer() {
                                   </TableRow>
                               </TableHeader>
                               <TableBody>
-                                  {sortedDisplayData.length > 0 ? sortedDisplayData.map((item) => (
-                                      <TableRow key={item.salesperson} className="text-sm">
-                                          <TableCell className="font-medium">
-                                              {item.salesperson}
-                                          </TableCell>
-                                          <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                          <TableCell className="text-right">{item.salesCount}</TableCell>
-                                          <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
-                                            <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
-                                              {(item.conversionRate * 100).toFixed(1)}%
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                      </TableRow>
-                                  )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
+                                  {sortedDisplayData.length > 0 ? sortedDisplayData.map((item, index) => {
+                                      const rank = index;
+                                      let rankIcon = null;
+                                      if (sortConfig.key === 'conversionRate' && sortConfig.direction === 'descending') {
+                                        if (rank === 0) rankIcon = <Trophy className="w-5 h-5 text-yellow-500 inline-block mr-2" />;
+                                        if (rank === 1) rankIcon = <Trophy className="w-5 h-5 text-gray-400 inline-block mr-2" />;
+                                        if (rank === 2) rankIcon = <Trophy className="w-5 h-5 text-yellow-700 inline-block mr-2" />;
+                                      }
+
+                                      return (
+                                          <TableRow key={item.salesperson} className="text-sm">
+                                              <TableCell className="font-medium">
+                                                  {rankIcon}
+                                                  {item.salesperson}
+                                              </TableCell>
+                                              <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                              <TableCell className="text-right">{item.salesCount}</TableCell>
+                                              <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
+                                                <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                                  {(item.conversionRate * 100).toFixed(1)}%
+                                                </div>
+                                              </TableCell>
+                                              <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                          </TableRow>
+                                      );
+                                  }) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
                               </TableBody>
                           </Table>
                       </CardContent>
@@ -750,7 +748,6 @@ export default function SalesAnalyzer() {
                                   <div key={item.name}>
                                       <div className="flex justify-between items-center text-sm mb-1">
                                           <span className="flex items-center gap-2">
-                                              {index < 3 && <Trophy className={`w-5 h-5 ${rankColor}`} />}
                                               {item.name}
                                           </span>
                                           <span>{item.value}%</span>
@@ -783,5 +780,7 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
 
     
