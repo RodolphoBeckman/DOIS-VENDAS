@@ -151,7 +151,7 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
         const values = row.split(';').map(v => v.trim());
         const rawSalesperson = values[0];
         const lowerRawSalesperson = rawSalesperson.toLowerCase();
-        if (!rawSalesperson || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor')) continue;
+        if (!rawSalesperson || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || lowerRawSalesperson.startsWith('data')) continue;
         const salesperson = cleanSalespersonName(rawSalesperson);
         if (!salesperson) continue;
         const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
@@ -196,7 +196,7 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         if (values.length < 11) continue;
         const rawSalespersonName = values[0];
         const lowerRawSalesperson = rawSalespersonName?.toLowerCase();
-        if (!rawSalespersonName || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor')) continue;
+        if (!rawSalespersonName || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor') || lowerRawSalesperson.startsWith('data')) continue;
         const salesperson = cleanSalespersonName(rawSalespersonName);
         if (!salesperson) continue;
 
@@ -277,69 +277,61 @@ export default function SalesAnalyzer() {
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-  
+
     setIsLoading(true);
     const newAttendanceFiles: LoadedAttendanceFile[] = [];
     const newSalesFiles: LoadedSalesFile[] = [];
     const errors: string[] = [];
-    const currentAttendanceNames = new Set(loadedAttendanceFiles.map(f => f.name));
-    const currentSalesNames = new Set(loadedSalesFiles.map(f => f.name));
-  
+
     const filePromises = Array.from(files).map(file => {
-      return new Promise<void>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const text = e.target?.result as string;
-            // Heurística para arquivo de atendimento: contém "At.;Pot."
-            if (text.includes('At.;Pot.')) {
-              if (!currentAttendanceNames.has(file.name)) {
-                const { data, dateRange } = parseAttendanceCsv(text);
-                newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
-                currentAttendanceNames.add(file.name);
-              }
-            } else { // Assume que é arquivo de vendas
-              if (!currentSalesNames.has(file.name)) {
-                const data = parseSalesCsv(text);
-                newSalesFiles.push({ name: file.name, content: text, parsedData: data });
-                currentSalesNames.add(file.name);
-              }
-            }
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : `Erro ao processar ${file.name}`;
-            errors.push(`${file.name}: ${errorMsg}`);
-          }
-          resolve();
-        };
-        reader.onerror = () => {
-          errors.push(`Erro ao ler o arquivo ${file.name}`);
-          resolve();
-        };
-        reader.readAsText(file, 'UTF-8');
-      });
+        return new Promise<void>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target?.result as string;
+                    // Heurística para arquivo de atendimento: contém "At.;Pot."
+                    if (text.includes('At.;Pot.')) {
+                        if (!loadedAttendanceFiles.some(f => f.name === file.name)) {
+                            const { data, dateRange } = parseAttendanceCsv(text);
+                            newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
+                        }
+                    } else { // Assume que é arquivo de vendas
+                        if (!loadedSalesFiles.some(f => f.name === file.name)) {
+                            const data = parseSalesCsv(text);
+                            newSalesFiles.push({ name: file.name, content: text, parsedData: data });
+                        }
+                    }
+                } catch (err) {
+                    const errorMsg = err instanceof Error ? err.message : `Erro ao processar ${file.name}`;
+                    errors.push(`${file.name}: ${errorMsg}`);
+                }
+                resolve();
+            };
+            reader.onerror = () => {
+                errors.push(`Erro ao ler o arquivo ${file.name}`);
+                resolve();
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
     });
-  
+
     Promise.all(filePromises).then(() => {
-      if (newAttendanceFiles.length > 0) {
         setLoadedAttendanceFiles(current => [...current, ...newAttendanceFiles]);
-      }
-      if (newSalesFiles.length > 0) {
         setLoadedSalesFiles(current => [...current, ...newSalesFiles]);
-      }
-      
-      const totalNewFiles = newAttendanceFiles.length + newSalesFiles.length;
-      if (totalNewFiles > 0) {
-        toast({ title: "Arquivos Carregados", description: `${totalNewFiles} novo(s) arquivo(s) processado(s) com sucesso.` });
-      }
-      if (errors.length > 0) {
-        toast({ variant: "destructive", title: "Erros no Upload", description: errors.join('; ') });
-      }
-  
-      setIsLoading(false);
-      setFileInputKey(Date.now()); // Reseta o input para permitir o mesmo arquivo novamente se necessário
+
+        const totalNewFiles = newAttendanceFiles.length + newSalesFiles.length;
+        if (totalNewFiles > 0) {
+            toast({ title: "Arquivos Carregados", description: `${totalNewFiles} novo(s) arquivo(s) processado(s) com sucesso.` });
+        }
+        if (errors.length > 0) {
+            toast({ variant: "destructive", title: "Erros no Upload", description: errors.join('; ') });
+        }
+
+        setIsLoading(false);
+        setFileInputKey(Date.now()); // Reseta o input para permitir o mesmo arquivo novamente se necessário
     });
-  
-  }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
+
+}, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const activeData = useMemo(() => {
     const attendanceData = mergeAttendanceData(loadedAttendanceFiles.map(f => f.parsedData));
@@ -692,5 +684,7 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
 
     
