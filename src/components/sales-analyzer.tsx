@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from 'date-fns/locale';
@@ -266,11 +266,14 @@ export default function SalesAnalyzer() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   
   const [fileInputKey, setFileInputKey] = useState(Date.now());
   
   const [aiSummary, setAiSummary] = useState<SalesSummaryOutput | null>(null);
   const { toast } = useToast();
+
+  const printRef = useRef<HTMLDivElement>(null);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'conversionRate', direction: 'descending' });
 
@@ -332,6 +335,38 @@ export default function SalesAnalyzer() {
     });
 
 }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
+  
+  const handleGeneratePdf = useCallback(async () => {
+    const element = printRef.current;
+    if (!element) {
+        toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Não foi possível encontrar o conteúdo para imprimir." });
+        return;
+    }
+
+    setIsGeneratingPdf(true);
+
+    try {
+        const canvas = await html2canvas(element, {
+            scale: 2, // Aumenta a resolução da imagem
+            backgroundColor: null, // Usa o fundo do elemento
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('relatorio-de-vendas.pdf');
+    } catch (error) {
+        console.error("Erro ao gerar PDF:", error);
+        toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Ocorreu um problema ao tentar criar o arquivo PDF." });
+    } finally {
+        setIsGeneratingPdf(false);
+    }
+  }, [toast]);
   
   const activeData = useMemo(() => {
     const attendanceData = mergeAttendanceData(loadedAttendanceFiles.map(f => f.parsedData));
@@ -499,10 +534,14 @@ export default function SalesAnalyzer() {
                 {isAiLoading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
                 Gerar Insights
             </Button>
+             <Button onClick={handleGeneratePdf} disabled={isGeneratingPdf || !hasFiles} variant="outline" className="bg-white">
+                {isGeneratingPdf ? <Loader2 className="mr-2 animate-spin" /> : <FileDown className="mr-2" />}
+                Exportar PDF
+            </Button>
         </div>
       </header>
       
-      <main className="space-y-6">
+      <main ref={printRef} className="space-y-6">
         {isLoading && (<div className="flex items-center justify-center text-primary rounded-lg bg-card p-4"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivos...</span></div>)}
         
         {!hasFiles && !isLoading && (
@@ -684,7 +723,3 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
-
-    
-
-    
