@@ -13,21 +13,13 @@ import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-su
 import { useToast } from "@/hooks/use-toast";
 import { 
     UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
-    TrendingUp, CheckCircle, DollarSign, HelpCircle, Cog, FileDown, ArrowUp, ArrowDown, ArrowUpDown
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, FileDown, ArrowUp, ArrowDown, ArrowUpDown, File, Folder, Lightbulb
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bar, BarChart, CartesianGrid, Legend, Tooltip, XAxis, YAxis } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Progress } from "@/components/ui/progress";
 
 // Tipos para dados de Atendimento
 type HourlyData = {
@@ -80,7 +72,6 @@ const cleanSalespersonName = (name: string): string => {
 
 const parseDateRangeFromString = (rangeStr: string): { start: Date, end: Date } | null => {
     const tryParseDate = (dateString: string): Date | null => {
-        // Common date formats for Brazil and others
         const formats = ['dd/MM/yyyy', 'yyyy/MM/dd', 'dd-MM-yyyy', 'yyyy-MM-dd', 'd/M/yy', 'd/M/yyyy'];
         for (const format of formats) {
             const date = parseDate(dateString.trim(), format, new Date());
@@ -183,7 +174,7 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
 };
 
 const parseSalesCsv = (csvText: string): SalespersonSales[] => {
-    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter-Boolean);
     if (lines.length < 2) throw new Error("Formato de arquivo de vendas inválido. O arquivo parece estar incompleto.");
 
     const firstLine = lines[0].toLowerCase();
@@ -192,7 +183,7 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         throw new Error("Arquivo incorreto. Você carregou um arquivo de Atendimento na área de Vendas. Por favor, use a área de upload correspondente.");
     }
     
-    const dataRows = lines.slice(1); // Pular cabeçalho
+    const dataRows = lines.slice(1);
     const parseCurrency = (str: string) => parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
     const parseIntSimple = (str: string) => parseInt(str, 10) || 0;
     const parseFloatSimple = (str: string) => parseFloat(str.replace(',', '.')) || 0;
@@ -200,16 +191,16 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
     const parsedData: SalespersonSales[] = [];
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
-        if (values.length < 11) continue; // Basic validation for row length
-        const rawSalespersonName = values[0]; // 'Vendedor' is at index 0
+        if (values.length < 11) continue;
+        const rawSalespersonName = values[0];
         if (rawSalespersonName?.toLowerCase() === 'total' || !rawSalespersonName) continue;
         
         parsedData.push({
             salesperson: cleanSalespersonName(rawSalespersonName),
-            salesCount: parseIntSimple(values[2]),       // 'Vendas' is at index 2
-            itemsPerSale: parseFloatSimple(values[6]),   // 'P.A.' is at index 6
-            totalRevenue: parseCurrency(values[8]),      // 'Total Vendas' is at index 8
-            averageTicket: parseCurrency(values[10]),    // 'Ticket Médio' is at index 10
+            salesCount: parseIntSimple(values[2]),
+            itemsPerSale: parseFloatSimple(values[6]),
+            totalRevenue: parseCurrency(values[8]),
+            averageTicket: parseCurrency(values[10]),
         });
     }
     if (parsedData.length === 0) throw new Error("Nenhum dado de vendas válido encontrado.");
@@ -251,7 +242,6 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
             }
             existingSale.salesCount += newSale.salesCount;
             existingSale.totalRevenue += newSale.totalRevenue;
-            // Recalcular médias ponderadas
             const totalSales = existingSale.salesCount;
             if (totalSales > 0) {
               existingSale.averageTicket = existingSale.totalRevenue / totalSales;
@@ -261,7 +251,6 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
     return Array.from(mergedMap.values());
 };
 
-
 type SortKey = keyof ConsolidatedData;
 type SortDirection = 'ascending' | 'descending';
 
@@ -269,142 +258,120 @@ type SortDirection = 'ascending' | 'descending';
 export default function SalesAnalyzer() {
   const [loadedAttendanceFiles, setLoadedAttendanceFiles] = useState<LoadedAttendanceFile[]>([]);
   const [loadedSalesFiles, setLoadedSalesFiles] = useState<LoadedSalesFile[]>([]);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [filterDateRange, setFilterDateRange] = useState<DateRange | undefined>();
   
   const [isLoading, setIsLoading] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   
-  const [attendanceInputKey, setAttendanceInputKey] = useState(Date.now());
-  const [salesInputKey, setSalesInputKey] = useState(Date.now());
+  const [fileInputKey, setFileInputKey] = useState(Date.now());
   
   const [aiSummary, setAiSummary] = useState<SalesSummaryOutput | null>(null);
   const { toast } = useToast();
 
-  const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'totalRevenue', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'conversionRate', direction: 'descending' });
 
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, type: 'attendance' | 'sales') => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const existingFiles = type === 'attendance' ? loadedAttendanceFiles : loadedSalesFiles;
-    if (existingFiles.some(f => f.name === file.name)) {
-        toast({ variant: "destructive", title: "Arquivo Duplicado", description: `O arquivo "${file.name}" já foi carregado.` });
-        if (type === 'attendance') setAttendanceInputKey(Date.now()); else setSalesInputKey(Date.now());
-        return;
-    }
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
 
     setIsLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string;
-        if (type === 'attendance') {
-            const { data: newParsedData, dateRange } = parseAttendanceCsv(text);
-            const newFile: LoadedAttendanceFile = { name: file.name, content: text, dateRange: dateRange, parsedData: newParsedData };
-            setLoadedAttendanceFiles(currentFiles => [...currentFiles, newFile]);
-            toast({ title: "Arquivo de Atendimento Carregado", description: `Dados de "${file.name}" adicionados.` });
-        } else { // type === 'sales'
-            const newParsedData = parseSalesCsv(text);
-            const newFile: LoadedSalesFile = { name: file.name, content: text, parsedData: newParsedData };
-            setLoadedSalesFiles(currentFiles => [...currentFiles, newFile]);
-            toast({ title: "Arquivo de Vendas Carregado", description: `Dados de "${file.name}" adicionados.` });
+    let newAttendanceFiles: LoadedAttendanceFile[] = [];
+    let newSalesFiles: LoadedSalesFile[] = [];
+    let errors: string[] = [];
+
+    const filePromises = Array.from(files).map(file => {
+      return new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const text = e.target?.result as string;
+            if (text.includes('At.;Pot.')) { // Heurística para arquivo de atendimento
+                const { data, dateRange } = parseAttendanceCsv(text);
+                if (!loadedAttendanceFiles.some(f => f.name === file.name)) {
+                  newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
+                }
+            } else { // Assume que é arquivo de vendas
+                const data = parseSalesCsv(text);
+                if (!loadedSalesFiles.some(f => f.name === file.name)) {
+                  newSalesFiles.push({ name: file.name, content: text, parsedData: data });
+                }
+            }
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : `Erro ao processar ${file.name}`;
+            errors.push(errorMsg);
+          }
+          resolve();
+        };
+        reader.onerror = () => {
+          errors.push(`Erro ao ler o arquivo ${file.name}`);
+          resolve();
+        };
+        reader.readAsText(file, 'UTF-8');
+      });
+    });
+
+    Promise.all(filePromises).then(() => {
+        setLoadedAttendanceFiles(current => [...current, ...newAttendanceFiles]);
+        setLoadedSalesFiles(current => [...current, ...newSalesFiles]);
+        
+        if (newAttendanceFiles.length > 0 || newSalesFiles.length > 0) {
+            toast({ title: "Arquivos Carregados", description: `${newAttendanceFiles.length + newSalesFiles.length} novo(s) arquivo(s) processado(s).` });
         }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Ocorreu um erro desconhecido.";
-        toast({ variant: "destructive", title: "Falha no Upload", description: errorMsg });
-      } finally {
+        if (errors.length > 0) {
+            toast({ variant: "destructive", title: "Erros no Upload", description: errors.join('; ') });
+        }
+
         setIsLoading(false);
-        if (type === 'attendance') setAttendanceInputKey(Date.now()); else setSalesInputKey(Date.now());
-      }
-    };
-    reader.onerror = () => {
-      setIsLoading(false);
-      toast({ variant: "destructive", title: "Erro de Leitura de Arquivo" });
-    };
-    reader.readAsText(file, 'UTF-8');
+        setFileInputKey(Date.now());
+    });
+
   }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const activeData = useMemo(() => {
-    // 1. Determine which attendance files are in the filtered date range.
-    const attendanceFilesToProcess = filterDateRange?.from
-      ? loadedAttendanceFiles.filter(file => {
-          const fileInterval = { start: file.dateRange.start, end: file.dateRange.end };
-          const filterInterval = { start: startOfDay(filterDateRange.from!), end: endOfDay(filterDateRange.to ?? filterDateRange.from!) };
-          // Check if file's date range overlaps with the filter's date range.
-          return isWithinInterval(fileInterval.start, filterInterval) || isWithinInterval(fileInterval.end, filterInterval) || 
-                 (fileInterval.start <= filterInterval.start && fileInterval.end >= filterInterval.end);
-        })
-      : loadedAttendanceFiles;
-
-    // 2. Merge all sales data once, it will be filtered later if needed.
-    const allMergedSales = mergeSalesData(loadedSalesFiles.map(f => f.parsedData));
-
-    // Exit early if there are no files loaded at all.
-    if (loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0) {
-        return { consolidatedData: [], combinedAttendanceCsv: '', combinedSalesCsv: '', displayDateRange: 'Nenhum dado para o período' };
-    }
+    const attendanceData = mergeAttendanceData(loadedAttendanceFiles.map(f => f.parsedData));
+    const salesData = mergeSalesData(loadedSalesFiles.map(f => f.parsedData));
     
-    // 3. Merge performance data from ONLY the relevant attendance files.
-    const mergedPerformances = mergeAttendanceData(attendanceFilesToProcess.map(f => f.parsedData));
-    
-    // 4. Determine the final list of sales data. If filtering by date, use only sales from salespeople active in that period.
-    const activeSalespeopleInPeriod = new Set(mergedPerformances.map(p => p.salesperson));
-    const mergedSales = filterDateRange?.from
-        ? allMergedSales.filter(s => activeSalespeopleInPeriod.has(s.salesperson))
-        : allMergedSales;
+    const allSalespeople = new Set([...attendanceData.map(p => p.salesperson), ...salesData.map(s => s.salesperson)]);
 
-    // 5. The final list of salespeople is the union of the (filtered) performances and (filtered) sales.
-    const salespeopleToShow = new Set([...mergedPerformances.map(p => p.salesperson), ...mergedSales.map(s => s.salesperson)]);
+    const consolidatedData: ConsolidatedData[] = Array.from(allSalespeople).map(name => {
+        const performance = attendanceData.find(p => p.salesperson === name);
+        const sales = salesData.find(s => s.salesperson === name);
 
-    const consolidatedData: ConsolidatedData[] = Array.from(salespeopleToShow).map(name => {
-        const performanceData = mergedPerformances.find(p => p.salesperson === name);
-        const salesData = mergedSales.find(s => s.salesperson === name);
-
-        const totalAttendances = performanceData?.totalAttendances ?? 0;
-        const salesCount = salesData?.salesCount ?? 0;
+        const totalAttendances = performance?.totalAttendances ?? 0;
+        const salesCount = sales?.salesCount ?? 0;
         
         return {
             salesperson: name,
-            hourly: performanceData?.hourly ?? [],
+            hourly: performance?.hourly ?? [],
             totalAttendances: totalAttendances,
-            totalPotentials: performanceData?.totalPotentials ?? 0,
+            totalPotentials: performance?.totalPotentials ?? 0,
             salesCount: salesCount,
-            totalRevenue: salesData?.totalRevenue ?? 0,
-            averageTicket: salesData?.averageTicket ?? 0,
-            itemsPerSale: salesData?.itemsPerSale ?? 0,
+            totalRevenue: sales?.totalRevenue ?? 0,
+            averageTicket: sales?.averageTicket ?? 0,
+            itemsPerSale: sales?.itemsPerSale ?? 0,
             conversionRate: totalAttendances > 0 ? (salesCount / totalAttendances) : 0,
         };
     });
     
-    // 6. Create combined CSVs for AI analysis.
-    const combinedAttendanceCsv = attendanceFilesToProcess.map(f => f.content).join('\n\n');
+    const combinedAttendanceCsv = loadedAttendanceFiles.map(f => f.content).join('\n\n');
     const combinedSalesCsv = loadedSalesFiles.map(f => f.content).join('\n\n');
 
     let displayDateRange: string;
-    if (filterDateRange?.from) {
-        const startDate = format(filterDateRange.from, "dd/MM/yy", { locale: ptBR });
-        const endDate = filterDateRange.to ? format(filterDateRange.to, "dd/MM/yy", { locale: ptBR }) : null;
-        displayDateRange = endDate ? `${startDate} - ${endDate}` : startDate;
-    } else if (loadedAttendanceFiles.length > 0) {
+    if (loadedAttendanceFiles.length > 0) {
         const allDates = loadedAttendanceFiles.flatMap(f => [f.dateRange.start, f.dateRange.end]);
         const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
         const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
         displayDateRange = `${format(minDate, "dd/MM/yyyy")} - ${format(maxDate, "dd/MM/yyyy")}`;
     } else {
-        displayDateRange = 'Nenhum período de atendimento carregado';
+        displayDateRange = 'Nenhum período carregado';
     }
 
     return { consolidatedData, combinedAttendanceCsv, combinedSalesCsv, displayDateRange };
 
-  }, [loadedAttendanceFiles, loadedSalesFiles, filterDateRange]);
+  }, [loadedAttendanceFiles, loadedSalesFiles]);
 
-
-  useEffect(() => {
+  const runAiAnalysis = useCallback(() => {
     if (!activeData.combinedAttendanceCsv || !activeData.combinedSalesCsv) {
-        setAiSummary(null);
+        toast({ variant: "destructive", title: "Dados Incompletos", description: "Carregue arquivos de atendimento e vendas para gerar insights." });
         return;
     }
     
@@ -421,97 +388,7 @@ export default function SalesAnalyzer() {
         setAiSummary(null);
       })
       .finally(() => setIsAiLoading(false));
-  }, [activeData.combinedAttendanceCsv, activeData.combinedSalesCsv, activeData.displayDateRange, toast]);
-
-  const resetData = useCallback(() => {
-    setLoadedAttendanceFiles([]);
-    setLoadedSalesFiles([]);
-    setSelectedSalesperson('all');
-    setAiSummary(null);
-    setFilterDateRange(undefined);
-    setAttendanceInputKey(Date.now());
-    setSalesInputKey(Date.now());
-    setIsImportOpen(false);
-    toast({ title: "Dados Resetados", description: "Pode começar uma nova análise." });
-  }, [toast]);
-  
-  const handleGeneratePdf = useCallback(async () => {
-    const triggerElements = document.querySelectorAll<HTMLElement>('[data-pdf-hide]');
-    triggerElements.forEach(el => el.style.display = 'none');
-
-    const input = document.getElementById('report-content');
-    if (!input) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao gerar PDF",
-        description: "Elemento do relatório não encontrado.",
-      });
-      triggerElements.forEach(el => el.style.display = 'flex');
-      return;
-    }
-
-    setIsGeneratingPdf(true);
-
-    try {
-      const canvas = await html2canvas(input, {
-        scale: 2,
-        useCORS: true,
-      });
-
-      triggerElements.forEach(el => el.style.display = 'flex');
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgProps = pdf.getImageProperties(imgData);
-      const imgWidth = pdfWidth;
-      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-
-      while (heightLeft > 0) {
-        position = -heightLeft;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
-      }
-      
-      const today = new Date();
-      const formattedDate = format(today, 'dd-MM-yyyy');
-      pdf.save(`relatorio-de-desempenho-${formattedDate}.pdf`);
-
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao Gerar PDF",
-        description: "Ocorreu um problema ao tentar criar o arquivo PDF.",
-      });
-      triggerElements.forEach(el => el.style.display = 'flex');
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  }, [toast]);
-  
-  const { consolidatedData } = activeData;
-
-  const uniqueSalespeople = useMemo(() => ['all', ...consolidatedData.map(d => d.salesperson).sort()], [consolidatedData]);
-
-  const displayData = useMemo(() => {
-    if (selectedSalesperson === 'all') return consolidatedData;
-    return consolidatedData.filter(d => d.salesperson === selectedSalesperson);
-  }, [consolidatedData, selectedSalesperson]);
+  }, [activeData, toast]);
   
   const requestSort = (key: SortKey) => {
     let direction: SortDirection = 'descending';
@@ -522,7 +399,7 @@ export default function SalesAnalyzer() {
   };
   
   const sortedDisplayData = useMemo(() => {
-    const sortableItems = [...displayData];
+    const sortableItems = [...activeData.consolidatedData];
     if (sortConfig.key) {
       sortableItems.sort((a, b) => {
         const aValue = a[sortConfig.key];
@@ -549,39 +426,29 @@ export default function SalesAnalyzer() {
       });
     }
     return sortableItems;
-  }, [displayData, sortConfig]);
+  }, [activeData.consolidatedData, sortConfig]);
   
-  const totalAttendances = useMemo(() => displayData.reduce((sum, p) => sum + p.totalAttendances, 0), [displayData]);
-  const totalSalesCount = useMemo(() => displayData.reduce((sum, p) => sum + p.salesCount, 0), [displayData]);
-  const totalRevenue = useMemo(() => displayData.reduce((sum, p) => sum + p.totalRevenue, 0), [displayData]);
+  const totalAttendances = useMemo(() => activeData.consolidatedData.reduce((sum, p) => sum + p.totalAttendances, 0), [activeData.consolidatedData]);
+  const totalSalesCount = useMemo(() => activeData.consolidatedData.reduce((sum, p) => sum + p.salesCount, 0), [activeData.consolidatedData]);
+  const totalRevenue = useMemo(() => activeData.consolidatedData.reduce((sum, p) => sum + p.totalRevenue, 0), [activeData.consolidatedData]);
   const averageConversionRate = useMemo(() => totalAttendances > 0 ? (totalSalesCount / totalAttendances) : 0, [totalAttendances, totalSalesCount]);
+  
+  const bestSalesperson = useMemo(() => {
+      if (sortedDisplayData.length === 0) return null;
+      // Assume o primeiro item após a ordenação padrão (melhor conversão)
+      return sortedDisplayData.reduce((best, current) => current.conversionRate > best.conversionRate ? current : best, sortedDisplayData[0]);
+  }, [sortedDisplayData]);
 
-  const hourlyTotals = useMemo(() => {
-    const totals = new Map<number, { attendances: number, potentials: number }>();
-    displayData.forEach(person => {
-        person.hourly.forEach(h => {
-            const current = totals.get(h.hour) || { attendances: 0, potentials: 0 };
-            current.attendances += h.attendances;
-            current.potentials += h.potentials;
-            totals.set(h.hour, current);
-        });
-    });
-    return Array.from(totals.entries())
-        .map(([hour, data]) => ({ name: `${String(hour).padStart(2, '0')}:00`, atendimentos: data.attendances, potenciais: data.potentials }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-  }, [displayData]);
-
-  const performanceBySalespersonChartData = useMemo(() => {
-    return displayData
-      .filter(item => item.totalAttendances > 0 || item.salesCount > 0)
+  const conversionChartData = useMemo(() => {
+    return [...activeData.consolidatedData]
+      .sort((a, b) => b.conversionRate - a.conversionRate)
+      .slice(0, 5)
       .map(item => ({
         name: item.salesperson.split(' ')[0],
-        atendimentos: item.totalAttendances,
-        vendas: item.salesCount,
-        receita: item.totalRevenue,
-      }))
-      .sort((a, b) => b.receita - a.receita);
-  }, [displayData]);
+        value: parseFloat((item.conversionRate * 100).toFixed(1)),
+      }));
+  }, [activeData.consolidatedData]);
+
   
   const SortableHeader = ({ tKey, label, className }: { tKey: SortKey, label: string, className?: string }) => {
     const isActive = sortConfig.key === tKey;
@@ -589,7 +456,7 @@ export default function SalesAnalyzer() {
 
     return (
         <TableHead className={className}>
-            <Button variant="ghost" onClick={() => requestSort(tKey)} className="group p-0 h-auto font-bold w-full justify-start data-[align=right]:justify-end" data-align={className?.includes('text-right') ? 'right' : 'left'}>
+            <Button variant="ghost" onClick={() => requestSort(tKey)} className="group p-0 h-auto font-bold w-full justify-start data-[align=right]:justify-end text-xs" data-align={className?.includes('text-right') ? 'right' : 'left'}>
                 {label}
                 {directionIcon}
             </Button>
@@ -597,224 +464,181 @@ export default function SalesAnalyzer() {
     )
   };
 
+  const hasFiles = loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0;
+
   return (
-    <div className="min-h-screen animate-in fade-in-50 bg-secondary/50">
-      <header className="sticky top-0 z-30 bg-card shadow-sm">
-        <div className="container mx-auto flex items-center justify-between p-4">
-          <h1 className="font-headline text-2xl flex items-center gap-2 text-foreground">
-            <BarChartIcon className="text-primary" />
-            <span>Analisador de Vendas</span>
-          </h1>
-          <div className="flex items-center gap-2" data-pdf-hide>
-              <Button onClick={handleGeneratePdf} variant="outline" disabled={isGeneratingPdf || (loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0)}>
-                  {isGeneratingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
-                  Gerar PDF
-              </Button>
-              <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-                  <DialogTrigger asChild>
-                      <Button variant="outline"><Cog className="mr-2 h-4 w-4" /> Configurar e Importar</Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[800px]">
-                      <DialogHeader>
-                          <DialogTitle className="font-headline text-2xl">Importar Dados</DialogTitle>
-                          <DialogDescription>Carregue seus arquivos CSV. Os dados são acumulados a cada novo upload.</DialogDescription>
-                      </DialogHeader>
-                      <div className="grid md:grid-cols-2 gap-6 py-4">
-                          <div>
-                              <Label htmlFor="attendance-upload" className="font-semibold text-base mb-2 block">1. Atendimentos e Potenciais</Label>
-                              <label htmlFor="attendance-upload" className="cursor-pointer group">
-                                  <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
-                                      <UploadCloud className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
-                                      <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
-                                      <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Atendimento</p>
-                                  </div>
-                                  <input key={attendanceInputKey} id="attendance-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'attendance')} disabled={isLoading} />
-                              </label>
-                          </div>
-                          <div>
-                              <Label htmlFor="sales-upload" className="font-semibold text-base mb-2 block">2. Vendas Realizadas (PDV)</Label>
-                              <label htmlFor="sales-upload" className="cursor-pointer group">
-                                  <div className="border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
-                                      <DollarSign className="w-10 h-10 text-muted-foreground group-hover:text-primary" />
-                                      <p className="mt-4 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para carregar</span> ou arraste</p>
-                                      <p className="text-xs text-muted-foreground mt-1">Arquivo CSV de Vendas</p>
-                                  </div>
-                                  <input key={salesInputKey} id="sales-upload" type="file" className="hidden" accept=".csv,.txt" onChange={(e) => handleFileUpload(e, 'sales')} disabled={isLoading} />
-                              </label>
-                          </div>
-                      </div>
-                      {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
-                          <div className="mt-4 grid grid-cols-2 gap-4">
-                              <div>
-                                  <h3 className="font-semibold mb-2">Atendimentos Carregados</h3>
-                                  <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedAttendanceFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
-                              </div>
-                               <div>
-                                  <h3 className="font-semibold mb-2">Vendas Carregadas</h3>
-                                  <ScrollArea className="h-[100px] border rounded-md p-2"><ul className="space-y-1">{loadedSalesFiles.map(file => (<li key={file.name} className="text-sm text-muted-foreground">{file.name}</li>))}</ul></ScrollArea>
-                              </div>
-                          </div>
-                      )}
-                      <DialogFooter>
-                          {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
-                              <Button variant="destructive" onClick={resetData}><X className="mr-2 h-4 w-4" /> Limpar Tudo</Button>
-                          )}
-                          <Button onClick={() => setIsImportOpen(false)}>Fechar</Button>
-                      </DialogFooter>
-                  </DialogContent>
-              </Dialog>
-            </div>
+    <div className="min-h-screen w-full p-4 sm:p-6 md:p-8 bg-secondary/80">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h1 className="font-headline text-3xl font-bold text-foreground flex items-center gap-3">
+                <BarChartIcon className="text-accent"/>
+                Planilha Inteligente
+            </h1>
+            <p className="text-muted-foreground mt-1">Análise automática com IA • Insights em tempo real</p>
+        </div>
+        <div className="flex items-center gap-2">
+            <label htmlFor="file-upload" className="cursor-pointer">
+                <Button asChild variant="outline" className="bg-white">
+                    <span>
+                        <UploadCloud className="mr-2 text-primary" />
+                        Upload Arquivos
+                    </span>
+                </Button>
+                <input id="file-upload" key={fileInputKey} type="file" className="hidden" accept=".csv,.txt" onChange={handleFileUpload} multiple disabled={isLoading}/>
+            </label>
+            <Button onClick={runAiAnalysis} disabled={isAiLoading || !hasFiles} className="bg-accent hover:bg-accent/90">
+                {isAiLoading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
+                Gerar Insights
+            </Button>
         </div>
       </header>
       
-      <main id="report-content" className="container mx-auto p-4 md:p-6 space-y-6">
-        {isLoading && (<div className="flex items-center justify-center text-primary"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivo...</span></div>)}
-        {(loadedAttendanceFiles.length === 0 && loadedSalesFiles.length === 0) && !isLoading && (
+      <main className="space-y-6">
+        {isLoading && (<div className="flex items-center justify-center text-primary rounded-lg bg-card p-4"><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span>Processando arquivos...</span></div>)}
+        
+        {!hasFiles && !isLoading && (
             <Card className="w-full p-6 text-center shadow-lg border-0 bg-card mt-6">
                 <CardHeader>
                     <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit"><HelpCircle className="w-10 h-10 text-primary" /></div>
-                    <CardTitle className="font-headline text-3xl mt-4">Bem-vindo ao Analisador de Vendas</CardTitle>
-                    <CardDescription>Para começar, clique em <span className="font-semibold text-primary">"Configurar e Importar"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
+                    <CardTitle className="font-headline text-3xl mt-4">Bem-vindo à Planilha Inteligente</CardTitle>
+                    <CardDescription>Para começar, clique em <span className="font-semibold text-primary">"Upload Arquivos"</span> e carregue seus arquivos de atendimento e vendas.</CardDescription>
                 </CardHeader>
             </Card>
         )}
-        {(loadedAttendanceFiles.length > 0 || loadedSalesFiles.length > 0) && (
-        <div className="animate-in fade-in-50">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center mb-6" data-pdf-hide>
-                <div className="flex-1">
-                    <h2 className="text-2xl font-headline text-foreground">Dashboard de Desempenho</h2>
-                    <p className="text-muted-foreground">Análise para o período: <span className="font-semibold text-primary">{activeData.displayDateRange}</span></p>
-                </div>
-                <div className="w-full flex-col md:flex-row flex gap-2">
-                    <Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className={cn("w-full md:w-[280px] justify-start text-left font-normal", !filterDateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{filterDateRange?.from ? (filterDateRange.to ? (<>{format(filterDateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(filterDateRange.to, "dd/MM/yy", { locale: ptBR })}</>) : (format(filterDateRange.from, "dd/MM/yy", { locale: ptBR }))) : (<span>Filtrar por Período</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={filterDateRange?.from} selected={filterDateRange} onSelect={setFilterDateRange} numberOfMonths={2} locale={ptBR} /></PopoverContent></Popover>
-                    <Select onValueChange={setSelectedSalesperson} value={selectedSalesperson}><SelectTrigger id="salesperson-filter" className="w-full md:w-[250px] bg-card"><SelectValue placeholder="Selecione um(a) vendedor(a)" /></SelectTrigger><SelectContent>{uniqueSalespeople.map(person => <SelectItem key={person} value={person}>{person === 'all' ? 'Todos os Vendedores' : person}</SelectItem>)}</SelectContent></Select>
-                </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Atendimentos</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalAttendances}</div><p className="text-xs text-muted-foreground">Total de clientes atendidos</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Vendas Realizadas</CardTitle><CheckCircle className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalSalesCount}</div><p className="text-xs text-muted-foreground">Total de transações</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{(averageConversionRate * 100).toFixed(1)}%</div><p className="text-xs text-muted-foreground">Vendas / Atendimentos</p></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Receita Total</CardTitle><DollarSign className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div><p className="text-xs text-muted-foreground">Soma de todas as vendas</p></CardContent></Card>
-            </div>
-            <div className="grid gap-6 lg:grid-cols-5 mt-6">
-                <div className="lg:col-span-3 space-y-6">
-                    <Card>
-                        <CardHeader><CardTitle className="font-headline">Desempenho por Hora</CardTitle><CardDescription>Atendimentos vs Potenciais ao longo do dia.</CardDescription></CardHeader>
-                        <CardContent className="pl-2">
-                            <ChartContainer config={{ atendimentos: { label: 'Atendimentos', color: 'hsl(var(--chart-1))' }, potenciais: { label: 'Potenciais', color: 'hsl(var(--chart-2))' }, }} className="h-[300px] w-full">
-                                <BarChart data={hourlyTotals} accessibilityLayer><CartesianGrid vertical={false} /><XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} fontSize={12} /><YAxis tickLine={false} axisLine={false} fontSize={12} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} content={<ChartTooltipContent />} /><Legend /><Bar dataKey="atendimentos" fill="var(--color-atendimentos)" radius={[4, 4, 0, 0]} /><Bar dataKey="potenciais" fill="var(--color-potenciais)" radius={[4, 4, 0, 0]} /></BarChart>
-                            </ChartContainer>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="font-headline flex items-center gap-2">
-                                <Target className="h-5 w-5 text-accent" />
-                                Atendimentos vs. Vendas por Vendedor
-                            </CardTitle>
-                            <CardDescription>Comparativo de esforço (atendimentos) e resultado (vendas).</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pl-2">
-                            <ChartContainer config={{
-                                atendimentos: { label: 'Atendimentos', color: 'hsl(var(--chart-1))' },
-                                vendas: { label: 'Vendas', color: 'hsl(var(--chart-2))' },
-                            }} className="h-[300px] w-full">
-                                <BarChart data={performanceBySalespersonChartData} accessibilityLayer>
-                                    <CartesianGrid vertical={false} />
-                                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} fontSize={12} />
-                                    <YAxis tickLine={false} axisLine={false} fontSize={12} />
-                                    <Tooltip cursor={{fill: 'hsl(var(--muted))'}} content={<ChartTooltipContent />} />
-                                    <Legend />
-                                    <Bar dataKey="atendimentos" fill="var(--color-atendimentos)" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="vendas" fill="var(--color-vendas)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ChartContainer>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle className="font-headline">Ranking de Desempenho</CardTitle><CardDescription>Análise consolidada por vendedor(a).</CardDescription></CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <SortableHeader tKey="salesperson" label="Vendedor(a)" />
-                                        <SortableHeader tKey="totalAttendances" label="Atend." className="text-right" />
-                                        <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
-                                        <SortableHeader tKey="conversionRate" label="Conversão" className="text-right" />
-                                        <SortableHeader tKey="totalRevenue" label="Receita" className="text-right" />
-                                        <SortableHeader tKey="averageTicket" label="Ticket" className="text-right" />
+
+        {hasFiles && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50">
+            {/* Coluna Esquerda */}
+            <div className="lg:col-span-2 space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                            <Folder className="text-primary"/>
+                            Arquivos Carregados
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {[...loadedAttendanceFiles, ...loadedSalesFiles].map(file => (
+                            <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
+                                <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
+                                <p className="text-xs text-green-600">Arquivo carregado com sucesso</p>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                            <Target className="text-primary"/>
+                            Taxa de Conversão por Vendedora
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <SortableHeader tKey="salesperson" label="Vendedora" />
+                                    <SortableHeader tKey="totalAttendances" label="Atendimentos" className="text-right" />
+                                    <SortableHeader tKey="salesCount" label="Vendas" className="text-right" />
+                                    <SortableHeader tKey="conversionRate" label="Conversão (%)" className="text-right" />
+                                    <SortableHeader tKey="totalRevenue" label="Receita (R$)" className="text-right" />
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
+                                    <TableRow key={item.salesperson} className="text-sm">
+                                        <TableCell className="font-medium">{item.salesperson}</TableCell>
+                                        <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                        <TableCell className="text-right">{item.salesCount}</TableCell>
+                                        <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
+                                          <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                            {(item.conversionRate * 100).toFixed(1)}%
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                                     </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
-                                        <TableRow key={item.salesperson}>
-                                            <TableCell className="font-medium">{item.salesperson}</TableCell>
-                                            <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                            <TableCell className="text-right">{item.salesCount}</TableCell>
-                                            <TableCell className="text-right font-bold text-primary">{(item.conversionRate * 100).toFixed(1)}%</TableCell>
-                                            <TableCell className="text-right font-bold text-accent">{item.totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                                            <TableCell className="text-right">{item.averageTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                                        </TableRow>
-                                    )) : <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum dado para esta seleção.</TableCell></TableRow>}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </div>
-                <div className="lg:col-span-2">
-                    {(isAiLoading && consolidatedData.length > 0) && (
-                      <Card><CardHeader><CardTitle className="flex items-center gap-2 font-headline"><Sparkles className="h-6 w-6 text-primary animate-pulse" />Analisando Insights...</CardTitle><CardDescription>A IA está preparando um resumo para você.</CardDescription></CardHeader>
-                        <CardContent className="space-y-4"><div className="space-y-2"><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-5/6" /></div><div className="space-y-2 pt-4"><Skeleton className="h-4 w-32 mb-2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /></div><div className="space-y-2 pt-4"><Skeleton className="h-4 w-32 mb-2" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /></div></CardContent>
-                      </Card>)}
-                    {aiSummary && !isAiLoading && (
-                      <Card className="animate-in fade-in-50 sticky top-24">
-                         <CardHeader><CardTitle className="flex items-center gap-2 font-headline"><Sparkles className="h-6 w-6 text-primary" />Insights com IA</CardTitle></CardHeader>
-                         <CardContent className="space-y-6 text-sm text-foreground/90">
-                            <div><h3 className="font-semibold text-base mb-2 text-foreground">Resumo Geral</h3><p className="leading-relaxed">{aiSummary.summary}</p></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><TrendingUp className="h-5 w-5 text-accent"/>Destaques</h3><ul className="list-disc pl-5 space-y-2">{aiSummary.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul></div>
-                            <div><h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><CheckCircle className="h-5 w-5 text-green-600"/>Recomendações</h3><ul className="list-disc pl-5 space-y-2">{aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-                            {aiSummary.individualHighlights && aiSummary.individualHighlights.length > 0 && (
-                                <div>
-                                    <h3 className="font-semibold flex items-center gap-2 mb-2 text-foreground"><Users className="h-5 w-5 text-primary"/>Destaques Individuais</h3>
-                                    <div className="space-y-4 pt-2">
-                                        {aiSummary.individualHighlights.map((item, index) => (
-                                            <div key={index} className="border-t border-border/50 pt-3 first:border-t-0 first:pt-0">
-                                                <p className="font-semibold text-foreground">{item.salesperson}</p>
-                                                <p className="text-sm mt-1 text-foreground/80">
-                                                    {item.highlight}
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                         </CardContent>
-                      </Card>)}
-                     {!aiSummary && !isAiLoading && loadedSalesFiles.length === 0 && loadedAttendanceFiles.length > 0 && (
-                        <Card className="animate-in fade-in-50 sticky top-24">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 font-headline">
-                                    <DollarSign className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de vendas (PDV)</span> para habilitar a análise de conversão e os insights completos da IA.</p>
-                            </CardContent>
-                        </Card>
-                     )}
-                     {!aiSummary && !isAiLoading && loadedAttendanceFiles.length === 0 && loadedSalesFiles.length > 0 && (
-                        <Card className="animate-in fade-in-50 sticky top-24">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 font-headline">
-                                    <Users className="h-6 w-6 text-amber-500" />Próximo Passo
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muted-foreground">Você carregou os dados de atendimento. Agora, <span className="font-semibold text-primary">importe o arquivo de atendimento</span> para habilitar a análise de conversão e os insights completos da IA.</p>
-                            </CardContent>
-                        </Card>
-                     )}
-                </div>
+                                )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Coluna Direita */}
+            <div className="space-y-6">
+                {(isAiLoading || aiSummary) && (
+                  <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Sparkles className="text-accent" />Insights da IA</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      {isAiLoading ? (
+                        <>
+                          <Skeleton className="h-8 w-full" />
+                          <Skeleton className="h-8 w-5/6" />
+                          <Skeleton className="h-8 w-full" />
+                        </>
+                      ) : aiSummary ? (
+                        aiSummary.highlights.map((h, i) => (
+                          <div key={i} className="flex items-start gap-3 text-sm p-2 rounded-lg bg-yellow-50 border border-yellow-200">
+                            <Lightbulb className="w-4 h-4 mt-1 shrink-0 text-yellow-600"/>
+                            <p className="text-yellow-800">{h}</p>
+                          </div>
+                        ))
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                )}
+                
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><BarChartIcon className="text-primary"/>Estatísticas</CardTitle></CardHeader>
+                    <CardContent className="space-y-4 text-sm">
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Taxa Média de Conversão:</span>
+                            <span className="font-bold text-lg text-primary">{(averageConversionRate * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Total de Atendimentos:</span>
+                            <span className="font-bold text-lg text-primary">{totalAttendances}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Melhor Vendedora:</span>
+                            <span className="font-bold text-lg text-accent">{bestSalesperson?.salesperson.split(' ')[0] ?? 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Faturamento Total:</span>
+                            <span className="font-bold text-lg text-green-600">{totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-pink-400 to-rose-400 text-white">
+                  <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><TrendingUp/>Taxa de Conversão por Vendedora</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    {conversionChartData.map(item => (
+                      <div key={item.name}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>{item.name}</span>
+                          <span>{item.value}%</span>
+                        </div>
+                        <Progress value={item.value} className="h-2 bg-white/30" indicatorClassName="bg-white"/>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
+                  <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                    <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      {aiSummary.recommendations.map((rec, i) => (
+                        <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
+                          <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
+                          <p>{rec}</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
             </div>
         </div>
         )}
@@ -822,3 +646,13 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+// Custom progress bar indicator to be used inside the component
+const ProgressIndicator = ({ value, className }: { value: number, className?: string }) => {
+  return (
+    <div
+      className={className}
+      style={{ width: `${value}%` }}
+    />
+  );
+};
