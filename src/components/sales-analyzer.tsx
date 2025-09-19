@@ -352,7 +352,6 @@ export default function SalesAnalyzer() {
         setIsLoading(false);
         setFileInputKey(Date.now()); // Reseta o input para permitir o mesmo arquivo novamente se necessário
     });
-
 }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const handleGeneratePdf = useCallback(async () => {
@@ -648,32 +647,21 @@ export default function SalesAnalyzer() {
                                   </TableRow>
                               </TableHeader>
                               <TableBody>
-                                  {sortedDisplayData.length > 0 ? sortedDisplayData.map((item, index) => {
-                                      const rank = index;
-                                      let rankIcon = null;
-                                      if (sortConfig.key === 'conversionRate' && sortConfig.direction === 'descending') {
-                                        if (rank === 0) rankIcon = <Trophy className="w-5 h-5 text-yellow-500 inline-block mr-2" />;
-                                        if (rank === 1) rankIcon = <Trophy className="w-5 h-5 text-gray-400 inline-block mr-2" />;
-                                        if (rank === 2) rankIcon = <Trophy className="w-5 h-5 text-yellow-700 inline-block mr-2" />;
-                                      }
-
-                                      return (
-                                          <TableRow key={item.salesperson} className="text-sm">
-                                              <TableCell className="font-medium">
-                                                  {rankIcon}
-                                                  {item.salesperson}
-                                              </TableCell>
-                                              <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                              <TableCell className="text-right">{item.salesCount}</TableCell>
-                                              <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
-                                                <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
-                                                  {(item.conversionRate * 100).toFixed(1)}%
-                                                </div>
-                                              </TableCell>
-                                              <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                          </TableRow>
-                                      );
-                                  }) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
+                                  {sortedDisplayData.length > 0 ? sortedDisplayData.map((item) => (
+                                      <TableRow key={item.salesperson} className="text-sm">
+                                          <TableCell className="font-medium">
+                                              {item.salesperson}
+                                          </TableCell>
+                                          <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                          <TableCell className="text-right">{item.salesCount}</TableCell>
+                                          <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
+                                            <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                              {(item.conversionRate * 100).toFixed(1)}%
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                      </TableRow>
+                                  )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
                               </TableBody>
                           </Table>
                       </CardContent>
@@ -791,11 +779,5 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
-
-    
-
-    
-
-    
 
     
