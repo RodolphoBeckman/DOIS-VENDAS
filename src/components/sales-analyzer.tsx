@@ -281,8 +281,6 @@ export default function SalesAnalyzer() {
   const { toast } = useToast();
 
   const printRef = useRef<HTMLDivElement>(null);
-  const mainTableRef = useRef<HTMLDivElement>(null);
-  const rightColumnRef = useRef<HTMLDivElement>(null);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'conversionRate', direction: 'descending' });
 
@@ -352,10 +350,9 @@ export default function SalesAnalyzer() {
 }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const handleGeneratePdf = useCallback(async () => {
-    const leftColumnEl = mainTableRef.current;
-    const rightColumnEl = rightColumnRef.current;
+    const contentToPrint = printRef.current;
 
-    if (!leftColumnEl || !rightColumnEl) {
+    if (!contentToPrint) {
         toast({ variant: "destructive", title: "Erro ao gerar PDF", description: "Não foi possível encontrar o conteúdo para imprimir." });
         return;
     }
@@ -363,43 +360,38 @@ export default function SalesAnalyzer() {
     setIsGeneratingPdf(true);
 
     try {
+        const canvas = await html2canvas(contentToPrint, { 
+          scale: 2, 
+          backgroundColor: null,
+          logging: false,
+          useCORS: true,
+          windowWidth: document.documentElement.scrollWidth,
+          windowHeight: document.documentElement.scrollHeight
+        });
+        const imgData = canvas.toDataURL('image/png');
+
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        const margin = 10;
-        const availableWidth = pdfWidth - (margin * 2);
 
-        // Process Right Column (summary cards)
-        const rightCanvas = await html2canvas(rightColumnEl, { scale: 2, backgroundColor: null });
-        const rightImgData = rightCanvas.toDataURL('image/png');
-        const rightImgProps = pdf.getImageProperties(rightImgData);
-        const rightImgWidth = availableWidth * 0.33; // Approx 1/3 of the page
-        const rightImgHeight = (rightImgProps.height * rightImgWidth) / rightImgProps.width;
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const ratio = canvasWidth / canvasHeight;
+
+        const imgWidth = pdfWidth;
+        const imgHeight = imgWidth / ratio;
         
-        // Add right column to the first page
-        pdf.addImage(rightImgData, 'PNG', pdfWidth - rightImgWidth - margin, margin, rightImgWidth, rightImgHeight);
-        
-        // Process Left Column (main table)
-        const leftCanvas = await html2canvas(leftColumnEl, { scale: 2, backgroundColor: null });
-        const leftImgData = leftCanvas.toDataURL('image/png');
-        const leftImgProps = pdf.getImageProperties(leftImgData);
-        const leftImgWidth = availableWidth * 0.65; // Approx 2/3 of the page
-        const leftImgHeight = (leftImgProps.height * leftImgWidth) / leftImgProps.width;
-        
-        let heightLeft = leftImgHeight;
+        let heightLeft = imgHeight;
         let position = 0;
-        
-        // Add first part of the left column to the first page, next to the right column
-        pdf.addImage(leftImgData, 'PNG', margin, margin, leftImgWidth, leftImgHeight);
-        heightLeft -= (pdfHeight - (margin * 2));
-        
-        // Add new pages if left column is too long
+
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+
         while (heightLeft > 0) {
-            position -= (pdfHeight - margin * 2); 
+            position = position - pdfHeight;
             pdf.addPage();
-            // Important: Use the same image data but clip it with the y-position
-            pdf.addImage(leftImgData, 'PNG', margin, position, leftImgWidth, leftImgHeight);
-            heightLeft -= (pdfHeight - margin * 2);
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pdfHeight;
         }
 
         pdf.save('relatorio-de-vendas.pdf');
@@ -437,32 +429,6 @@ export default function SalesAnalyzer() {
         };
     });
     
-    const combineCsvContent = (files: {content: string}[], isAttendance: boolean): string => {
-        if (files.length === 0) return '';
-        
-        const headerLineCount = isAttendance ? 3 : 1;
-        const firstFileLines = files[0].content.split(/\r?\n/);
-        const header = firstFileLines.slice(0, headerLineCount).join('\n');
-        
-        const allDataRows = files.flatMap((file, index) => {
-            const lines = file.content.split(/\r?\n/);
-            // For the first file, take data rows after header. For subsequent files, do the same.
-            const dataRows = lines.slice(headerLineCount);
-            return dataRows.filter(row => row.trim() !== ''); // Filter out empty lines
-        });
-
-        // Filter out any row that could be a header
-        const filteredDataRows = allDataRows.filter(row => {
-            const lowerRow = row.toLowerCase();
-            return !lowerRow.includes('vendedor;') && !lowerRow.includes('at.;pot.');
-        });
-
-        return [header, ...filteredDataRows].join('\n');
-    };
-
-    const combinedAttendanceCsv = combineCsvContent(loadedAttendanceFiles, true);
-    const combinedSalesCsv = combineCsvContent(loadedSalesFiles, false);
-
     let displayDateRange: { start: Date, end: Date } | null = null;
     if (loadedAttendanceFiles.length > 0) {
         const allDates = loadedAttendanceFiles.flatMap(f => [f.dateRange.start, f.dateRange.end]);
@@ -471,34 +437,9 @@ export default function SalesAnalyzer() {
         displayDateRange = { start: minDate, end: maxDate };
     }
 
-    return { consolidatedData, combinedAttendanceCsv, combinedSalesCsv, displayDateRange };
+    return { consolidatedData, displayDateRange };
 
   }, [loadedAttendanceFiles, loadedSalesFiles]);
-
-  const runAiAnalysis = useCallback(() => {
-    if (!activeData.combinedAttendanceCsv || !activeData.combinedSalesCsv) {
-        toast({ variant: "destructive", title: "Dados Incompletos", description: "Carregue arquivos de atendimento e vendas para gerar insights." });
-        return;
-    }
-    
-    const dateRangeString = activeData.displayDateRange 
-        ? `${format(activeData.displayDateRange.start, "dd/MM/yyyy")} - ${format(activeData.displayDateRange.end, "dd/MM/yyyy")}`
-        : 'N/A';
-
-    setIsAiLoading(true);
-    summarizeSalesData({ 
-        attendanceCsvData: activeData.combinedAttendanceCsv, 
-        salesCsvData: activeData.combinedSalesCsv, 
-        dateRange: dateRangeString
-    })
-      .then(setAiSummary)
-      .catch(aiError => {
-        console.error("Falha na análise de IA:", aiError);
-        toast({ variant: "destructive", title: "Falha na Análise de IA", description: aiError instanceof Error ? aiError.message : "Não foi possível gerar insights." });
-        setAiSummary(null);
-      })
-      .finally(() => setIsAiLoading(false));
-  }, [activeData, toast]);
   
   const requestSort = (key: SortKey) => {
     let direction: SortDirection = 'descending';
@@ -537,6 +478,39 @@ export default function SalesAnalyzer() {
     }
     return sortableItems;
   }, [activeData.consolidatedData, sortConfig]);
+
+  const runAiAnalysis = useCallback(() => {
+    if (sortedDisplayData.length === 0) {
+        toast({ variant: "destructive", title: "Dados Incompletos", description: "Carregue arquivos de atendimento e vendas para gerar insights." });
+        return;
+    }
+    
+    const dateRangeString = activeData.displayDateRange 
+        ? `${format(activeData.displayDateRange.start, "dd/MM/yyyy")} - ${format(activeData.displayDateRange.end, "dd/MM/yyyy")}`
+        : 'N/A';
+
+    // Criar o relatório de texto a partir dos dados já ordenados
+    const reportHeader = `Relatório de Conversão de Vendas - Período: ${dateRangeString}\n\n`;
+    const tableHeader = "Vendedora | Atendimentos | Vendas | Conversão (%) | Receita (R$)\n";
+    const tableBody = sortedDisplayData.map(item => 
+        `${item.salesperson} | ${item.totalAttendances} | ${item.salesCount} | ${(item.conversionRate * 100).toFixed(1)}% | ${item.totalRevenue.toFixed(2)}`
+    ).join('\n');
+    const conversionReport = reportHeader + tableHeader + tableBody;
+
+
+    setIsAiLoading(true);
+    summarizeSalesData({ 
+        conversionReport: conversionReport, 
+        dateRange: dateRangeString
+    })
+      .then(setAiSummary)
+      .catch(aiError => {
+        console.error("Falha na análise de IA:", aiError);
+        toast({ variant: "destructive", title: "Falha na Análise de IA", description: aiError instanceof Error ? aiError.message : "Não foi possível gerar insights." });
+        setAiSummary(null);
+      })
+      .finally(() => setIsAiLoading(false));
+  }, [activeData.displayDateRange, sortedDisplayData, toast]);
   
   const totalAttendances = useMemo(() => activeData.consolidatedData.reduce((sum, p) => sum + p.totalAttendances, 0), [activeData.consolidatedData]);
   const totalSalesCount = useMemo(() => activeData.consolidatedData.reduce((sum, p) => sum + p.salesCount, 0), [activeData.consolidatedData]);
@@ -625,7 +599,7 @@ export default function SalesAnalyzer() {
           {hasFiles && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50">
               {/* Coluna Esquerda */}
-              <div ref={mainTableRef} className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-6">
                   {activeData.displayDateRange && (
                       <Card>
                           <CardHeader>
@@ -723,7 +697,7 @@ export default function SalesAnalyzer() {
               </div>
 
               {/* Coluna Direita */}
-              <div ref={rightColumnRef} className="space-y-6">
+              <div className="space-y-6">
                   <Card>
                       <CardHeader>
                           <CardTitle className="flex items-center gap-2 font-headline text-lg">
@@ -797,5 +771,9 @@ export default function SalesAnalyzer() {
 }
 
     
+
+    
+
+
 
     
