@@ -13,7 +13,7 @@ import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-su
 import { useToast } from "@/hooks/use-toast";
 import { 
     UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
-    TrendingUp, CheckCircle, DollarSign, HelpCircle, FileDown, ArrowUp, ArrowDown, ArrowUpDown, File, Folder, Lightbulb
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, FileDown, ArrowUp, ArrowDown, ArrowUpDown, File, Folder, Lightbulb, Trophy
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -299,7 +299,7 @@ export default function SalesAnalyzer() {
                             newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
                         }
                     } else { // Assume que é arquivo de vendas
-                        if (!loadedSalesFiles.some(f => f.name === file.name)) {
+                         if (!loadedSalesFiles.some(f => f.name === file.name)) {
                             const data = parseSalesCsv(text);
                             newSalesFiles.push({ name: file.name, content: text, parsedData: data });
                         }
@@ -598,19 +598,26 @@ export default function SalesAnalyzer() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {sortedDisplayData.length > 0 ? sortedDisplayData.map(item => (
-                                    <TableRow key={item.salesperson} className="text-sm">
-                                        <TableCell className="font-medium">{item.salesperson}</TableCell>
-                                        <TableCell className="text-right">{item.totalAttendances}</TableCell>
-                                        <TableCell className="text-right">{item.salesCount}</TableCell>
-                                        <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
-                                          <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
-                                            {(item.conversionRate * 100).toFixed(1)}%
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                    </TableRow>
-                                )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
+                                {sortedDisplayData.length > 0 ? sortedDisplayData.map((item, index) => {
+                                    const rank = index + 1;
+                                    const rankColor = rank === 1 ? 'text-yellow-500' : rank === 2 ? 'text-gray-400' : rank === 3 ? 'text-yellow-700' : '';
+                                    return (
+                                        <TableRow key={item.salesperson} className="text-sm">
+                                            <TableCell className="font-medium flex items-center gap-2">
+                                                {rank <= 3 && <Trophy className={`w-5 h-5 ${rankColor}`} />}
+                                                {item.salesperson}
+                                            </TableCell>
+                                            <TableCell className="text-right">{item.totalAttendances}</TableCell>
+                                            <TableCell className="text-right">{item.salesCount}</TableCell>
+                                            <TableCell className={`text-right font-bold ${item.conversionRate > averageConversionRate ? 'text-green-600' : 'text-amber-600'}`}>
+                                              <div className={`p-1 rounded-md inline-block ${item.conversionRate > averageConversionRate ? 'bg-green-100' : 'bg-amber-100'}`}>
+                                                {(item.conversionRate * 100).toFixed(1)}%
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-right font-medium">{item.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                        </TableRow>
+                                    )
+                                }) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum dado para exibir.</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </CardContent>
@@ -723,3 +730,5 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
