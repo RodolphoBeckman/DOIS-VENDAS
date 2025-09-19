@@ -174,7 +174,7 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
 };
 
 const parseSalesCsv = (csvText: string): SalespersonSales[] => {
-    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter-Boolean);
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length < 2) throw new Error("Formato de arquivo de vendas inválido. O arquivo parece estar incompleto.");
 
     const firstLine = lines[0].toLowerCase();
@@ -271,33 +271,38 @@ export default function SalesAnalyzer() {
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
-
+    if (!files || files.length === 0) return;
+  
     setIsLoading(true);
-    let newAttendanceFiles: LoadedAttendanceFile[] = [];
-    let newSalesFiles: LoadedSalesFile[] = [];
-    let errors: string[] = [];
-
+    const newAttendanceFiles: LoadedAttendanceFile[] = [];
+    const newSalesFiles: LoadedSalesFile[] = [];
+    const errors: string[] = [];
+    const currentAttendanceNames = new Set(loadedAttendanceFiles.map(f => f.name));
+    const currentSalesNames = new Set(loadedSalesFiles.map(f => f.name));
+  
     const filePromises = Array.from(files).map(file => {
       return new Promise<void>((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const text = e.target?.result as string;
-            if (text.includes('At.;Pot.')) { // Heurística para arquivo de atendimento
+            // Heurística para arquivo de atendimento: contém "At.;Pot."
+            if (text.includes('At.;Pot.')) {
+              if (!currentAttendanceNames.has(file.name)) {
                 const { data, dateRange } = parseAttendanceCsv(text);
-                if (!loadedAttendanceFiles.some(f => f.name === file.name)) {
-                  newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
-                }
+                newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
+                currentAttendanceNames.add(file.name);
+              }
             } else { // Assume que é arquivo de vendas
+              if (!currentSalesNames.has(file.name)) {
                 const data = parseSalesCsv(text);
-                if (!loadedSalesFiles.some(f => f.name === file.name)) {
-                  newSalesFiles.push({ name: file.name, content: text, parsedData: data });
-                }
+                newSalesFiles.push({ name: file.name, content: text, parsedData: data });
+                currentSalesNames.add(file.name);
+              }
             }
           } catch (err) {
             const errorMsg = err instanceof Error ? err.message : `Erro ao processar ${file.name}`;
-            errors.push(errorMsg);
+            errors.push(`${file.name}: ${errorMsg}`);
           }
           resolve();
         };
@@ -308,22 +313,27 @@ export default function SalesAnalyzer() {
         reader.readAsText(file, 'UTF-8');
       });
     });
-
+  
     Promise.all(filePromises).then(() => {
+      if (newAttendanceFiles.length > 0) {
         setLoadedAttendanceFiles(current => [...current, ...newAttendanceFiles]);
+      }
+      if (newSalesFiles.length > 0) {
         setLoadedSalesFiles(current => [...current, ...newSalesFiles]);
-        
-        if (newAttendanceFiles.length > 0 || newSalesFiles.length > 0) {
-            toast({ title: "Arquivos Carregados", description: `${newAttendanceFiles.length + newSalesFiles.length} novo(s) arquivo(s) processado(s).` });
-        }
-        if (errors.length > 0) {
-            toast({ variant: "destructive", title: "Erros no Upload", description: errors.join('; ') });
-        }
-
-        setIsLoading(false);
-        setFileInputKey(Date.now());
+      }
+      
+      const totalNewFiles = newAttendanceFiles.length + newSalesFiles.length;
+      if (totalNewFiles > 0) {
+        toast({ title: "Arquivos Carregados", description: `${totalNewFiles} novo(s) arquivo(s) processado(s) com sucesso.` });
+      }
+      if (errors.length > 0) {
+        toast({ variant: "destructive", title: "Erros no Upload", description: errors.join('; ') });
+      }
+  
+      setIsLoading(false);
+      setFileInputKey(Date.now()); // Reseta o input para permitir o mesmo arquivo novamente se necessário
     });
-
+  
   }, [toast, loadedAttendanceFiles, loadedSalesFiles]);
   
   const activeData = useMemo(() => {
@@ -518,11 +528,18 @@ export default function SalesAnalyzer() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {[...loadedAttendanceFiles, ...loadedSalesFiles].map(file => (
+                        {loadedAttendanceFiles.map(file => (
                             <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
                                 <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
                                 <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
-                                <p className="text-xs text-green-600">Arquivo carregado com sucesso</p>
+                                <p className="text-xs text-green-600">Atendimento carregado</p>
+                            </div>
+                        ))}
+                        {loadedSalesFiles.map(file => (
+                            <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
+                                <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
+                                <p className="text-xs text-blue-600">Vendas carregado</p>
                             </div>
                         ))}
                     </CardContent>
@@ -647,12 +664,4 @@ export default function SalesAnalyzer() {
   );
 }
 
-// Custom progress bar indicator to be used inside the component
-const ProgressIndicator = ({ value, className }: { value: number, className?: string }) => {
-  return (
-    <div
-      className={className}
-      style={{ width: `${value}%` }}
-    />
-  );
-};
+    
