@@ -13,7 +13,7 @@ import { summarizeSalesData, type SalesSummaryOutput } from '@/ai/flows/sales-su
 import { useToast } from "@/hooks/use-toast";
 import { 
     UploadCloud, BarChart as BarChartIcon, Users, Target, Calendar as CalendarIcon, X, Loader2, Sparkles, 
-    TrendingUp, CheckCircle, DollarSign, HelpCircle, FileDown, ArrowUp, ArrowDown, ArrowUpDown, File, Folder, Lightbulb, Trophy
+    TrendingUp, CheckCircle, DollarSign, HelpCircle, FileDown, ArrowUp, ArrowDown, ArrowUpDown, File, Folder, Lightbulb
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,7 +48,6 @@ type SalespersonSales = {
   salesCount: number;
   totalRevenue: number;
   averageTicket: number;
-  itemsPerSale: number;
 };
 
 type LoadedSalesFile = {
@@ -205,7 +204,6 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         parsedData.push({
             salesperson,
             salesCount: parseIntSimple(values[2]),
-            itemsPerSale: parseFloatSimple(values[6]),
             totalRevenue: parseCurrency(values[8]),
             averageTicket: parseCurrency(values[10]),
         });
@@ -244,7 +242,7 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
         for (const newSale of dataset) {
             let existingSale = mergedMap.get(newSale.salesperson);
             if (!existingSale) {
-                existingSale = { salesperson: newSale.salesperson, salesCount: 0, totalRevenue: 0, averageTicket: 0, itemsPerSale: 0 };
+                existingSale = { salesperson: newSale.salesperson, salesCount: 0, totalRevenue: 0, averageTicket: 0 };
                 mergedMap.set(newSale.salesperson, existingSale);
             }
             existingSale.salesCount += newSale.salesCount;
@@ -253,15 +251,12 @@ const mergeSalesData = (datasets: SalespersonSales[][]): SalespersonSales[] => {
     }
     
     // After summing up everything, recalculate derived metrics
-    for (const [name, sale] of mergedMap.entries()) {
+    for (const sale of mergedMap.values()) {
         if (sale.salesCount > 0) {
             sale.averageTicket = sale.totalRevenue / sale.salesCount;
         } else {
             sale.averageTicket = 0;
         }
-        // Note: itemsPerSale would also need to be recalculated if it were an aggregated metric
-        // For now, it remains the value from the last file read for that salesperson, which is likely incorrect.
-        // This should be addressed if itemsPerSale becomes a critical metric.
     }
 
     return Array.from(mergedMap.values());
@@ -392,13 +387,13 @@ export default function SalesAnalyzer() {
         let heightLeft = leftImgHeight;
         let position = 0;
         
-        // Add first part of the left column
+        // Add first part of the left column to the first page, next to the right column
         pdf.addImage(leftImgData, 'PNG', margin, margin, leftImgWidth, leftImgHeight);
         heightLeft -= (pdfHeight - (margin * 2));
         
         // Add new pages if left column is too long
         while (heightLeft > 0) {
-            position -= (pdfHeight - margin * 2); // Recalculate position
+            position -= (pdfHeight - margin * 2); 
             pdf.addPage();
             // Important: Use the same image data but clip it with the y-position
             pdf.addImage(leftImgData, 'PNG', margin, position, leftImgWidth, leftImgHeight);
@@ -436,7 +431,6 @@ export default function SalesAnalyzer() {
             salesCount: salesCount,
             totalRevenue: sales?.totalRevenue ?? 0,
             averageTicket: sales?.averageTicket ?? 0,
-            itemsPerSale: sales?.itemsPerSale ?? 0,
             conversionRate: totalAttendances > 0 ? (salesCount / totalAttendances) : 0,
         };
     });
@@ -689,13 +683,13 @@ export default function SalesAnalyzer() {
                   )}
 
                   {aiSummary?.recommendations && aiSummary.recommendations.length > 0 && (
-                    <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                    <Card>
                       <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Lightbulb/>Sugestões Inteligentes</CardTitle></CardHeader>
                       <CardContent className="space-y-3">
                         {aiSummary.recommendations.map((rec, i) => (
-                          <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-white/20">
-                            <CheckCircle className="w-4 h-4 mt-1 shrink-0"/>
-                            <p>{rec}</p>
+                          <div key={i} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-primary/10 border border-primary/20">
+                            <CheckCircle className="w-4 h-4 mt-1 shrink-0 text-primary"/>
+                            <p className="text-foreground">{rec}</p>
                           </div>
                         ))}
                       </CardContent>
@@ -755,9 +749,7 @@ export default function SalesAnalyzer() {
                   <Card className="bg-gradient-to-br from-pink-400 to-rose-400 text-white">
                       <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><TrendingUp/>Taxa de Conversão por Vendedora</CardTitle></CardHeader>
                       <CardContent className="space-y-4">
-                          {conversionChartData.map((item, index) => {
-                              const rankColor = index === 0 ? 'text-yellow-300' : index === 1 ? 'text-gray-300' : index === 2 ? 'text-yellow-500' : '';
-                              return (
+                          {conversionChartData.map((item) => (
                                   <div key={item.name}>
                                       <div className="flex justify-between items-center text-sm mb-1">
                                           <span className="flex items-center gap-2">
@@ -767,8 +759,7 @@ export default function SalesAnalyzer() {
                                       </div>
                                       <Progress value={item.value} className="h-2 bg-white/30" indicatorClassName="bg-white"/>
                                   </div>
-                              );
-                          })}
+                              ))}
                       </CardContent>
                   </Card>
               </div>
