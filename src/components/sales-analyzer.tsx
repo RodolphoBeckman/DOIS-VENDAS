@@ -150,7 +150,8 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
     for (const row of dataRows) {
         const values = row.split(';').map(v => v.trim());
         const rawSalesperson = values[0];
-        if (rawSalesperson.toLowerCase() === 'total' || !rawSalesperson) continue;
+        const lowerRawSalesperson = rawSalesperson.toLowerCase();
+        if (lowerRawSalesperson === 'total' || !rawSalesperson || lowerRawSalesperson === 'nara' || lowerRawSalesperson === 'vendedor') continue;
         const salesperson = cleanSalespersonName(rawSalesperson);
         const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
         for(let i = 1; i < values.length; i++) {
@@ -193,7 +194,8 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         const values = row.split(';').map(v => v.trim());
         if (values.length < 11) continue;
         const rawSalespersonName = values[0];
-        if (rawSalespersonName?.toLowerCase() === 'total' || !rawSalespersonName) continue;
+        const lowerRawSalesperson = rawSalespersonName?.toLowerCase();
+        if (lowerRawSalesperson === 'total' || !rawSalespersonName || lowerRawSalesperson === 'nara' || lowerRawSalesperson === 'vendedor') continue;
         
         parsedData.push({
             salesperson: cleanSalespersonName(rawSalespersonName),
@@ -365,14 +367,12 @@ export default function SalesAnalyzer() {
     const combinedAttendanceCsv = loadedAttendanceFiles.map(f => f.content).join('\n\n');
     const combinedSalesCsv = loadedSalesFiles.map(f => f.content).join('\n\n');
 
-    let displayDateRange: string;
+    let displayDateRange: { start: Date, end: Date } | null = null;
     if (loadedAttendanceFiles.length > 0) {
         const allDates = loadedAttendanceFiles.flatMap(f => [f.dateRange.start, f.dateRange.end]);
         const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
         const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
-        displayDateRange = `${format(minDate, "dd/MM/yyyy")} - ${format(maxDate, "dd/MM/yyyy")}`;
-    } else {
-        displayDateRange = 'Nenhum período carregado';
+        displayDateRange = { start: minDate, end: maxDate };
     }
 
     return { consolidatedData, combinedAttendanceCsv, combinedSalesCsv, displayDateRange };
@@ -385,11 +385,15 @@ export default function SalesAnalyzer() {
         return;
     }
     
+    const dateRangeString = activeData.displayDateRange 
+        ? `${format(activeData.displayDateRange.start, "dd/MM/yyyy")} - ${format(activeData.displayDateRange.end, "dd/MM/yyyy")}`
+        : 'N/A';
+
     setIsAiLoading(true);
     summarizeSalesData({ 
         attendanceCsvData: activeData.combinedAttendanceCsv, 
         salesCsvData: activeData.combinedSalesCsv, 
-        dateRange: activeData.displayDateRange 
+        dateRange: dateRangeString
     })
       .then(setAiSummary)
       .catch(aiError => {
@@ -520,30 +524,27 @@ export default function SalesAnalyzer() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in-50">
             {/* Coluna Esquerda */}
             <div className="lg:col-span-2 space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
-                            <Folder className="text-primary"/>
-                            Arquivos Carregados
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {loadedAttendanceFiles.map(file => (
-                            <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
-                                <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                                <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
-                                <p className="text-xs text-green-600">Atendimento carregado</p>
+                {activeData.displayDateRange && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                                <CalendarIcon className="text-primary"/>
+                                Período da Análise
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex items-center gap-4 text-center">
+                            <div>
+                                <p className="text-sm text-muted-foreground">Data Inicial</p>
+                                <p className="font-bold text-lg">{format(activeData.displayDateRange.start, "dd/MM/yyyy")}</p>
                             </div>
-                        ))}
-                        {loadedSalesFiles.map(file => (
-                            <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
-                                <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                                <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
-                                <p className="text-xs text-blue-600">Vendas carregado</p>
+                            <div className="text-muted-foreground">→</div>
+                             <div>
+                                <p className="text-sm text-muted-foreground">Data Final</p>
+                                <p className="font-bold text-lg">{format(activeData.displayDateRange.end, "dd/MM/yyyy")}</p>
                             </div>
-                        ))}
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                )}
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 font-headline text-lg">
@@ -584,6 +585,31 @@ export default function SalesAnalyzer() {
 
             {/* Coluna Direita */}
             <div className="space-y-6">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 font-headline text-lg">
+                            <Folder className="text-primary"/>
+                            Arquivos Carregados
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {loadedAttendanceFiles.map(file => (
+                            <div key={file.name} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 text-center">
+                                <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-green-800 break-words">{file.name}</p>
+                                <p className="text-xs text-green-600">Atendimento</p>
+                            </div>
+                        ))}
+                        {loadedSalesFiles.map(file => (
+                            <div key={file.name} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 text-center">
+                                <File className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                                <p className="text-sm font-medium text-blue-800 break-words">{file.name}</p>
+                                <p className="text-xs text-blue-600">Vendas</p>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+
                 {(isAiLoading || aiSummary) && (
                   <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2 font-headline text-lg"><Sparkles className="text-accent" />Insights da IA</CardTitle></CardHeader>
