@@ -151,8 +151,9 @@ const parseAttendanceCsv = (csvText: string): { data: SalespersonPerformance[], 
         const values = row.split(';').map(v => v.trim());
         const rawSalesperson = values[0];
         const lowerRawSalesperson = rawSalesperson.toLowerCase();
-        if (lowerRawSalesperson === 'total' || !rawSalesperson || lowerRawSalesperson === 'nara' || lowerRawSalesperson === 'vendedor') continue;
+        if (!rawSalesperson || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor')) continue;
         const salesperson = cleanSalespersonName(rawSalesperson);
+        if (!salesperson) continue;
         const hourlyMap = new Map<number, { attendances: number, potentials: number }>();
         for(let i = 1; i < values.length; i++) {
             if (i > columns.length) continue;
@@ -195,10 +196,12 @@ const parseSalesCsv = (csvText: string): SalespersonSales[] => {
         if (values.length < 11) continue;
         const rawSalespersonName = values[0];
         const lowerRawSalesperson = rawSalespersonName?.toLowerCase();
-        if (lowerRawSalesperson === 'total' || !rawSalespersonName || lowerRawSalesperson === 'nara' || lowerRawSalesperson === 'vendedor') continue;
-        
+        if (!rawSalespersonName || lowerRawSalesperson.includes('total') || lowerRawSalesperson.includes('nara') || lowerRawSalesperson.includes('vendedor')) continue;
+        const salesperson = cleanSalespersonName(rawSalespersonName);
+        if (!salesperson) continue;
+
         parsedData.push({
-            salesperson: cleanSalespersonName(rawSalespersonName),
+            salesperson,
             salesCount: parseIntSimple(values[2]),
             itemsPerSale: parseFloatSimple(values[6]),
             totalRevenue: parseCurrency(values[8]),
