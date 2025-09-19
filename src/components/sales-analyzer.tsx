@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useCallback, useRef } from 'react';
@@ -410,7 +411,7 @@ export default function SalesAnalyzer() {
     }
 }, [toast]);
   
-  const activeData = useMemo(() => {
+ const activeData = useMemo(() => {
     const attendanceData = mergeAttendanceData(loadedAttendanceFiles.map(f => f.parsedData));
     const salesData = mergeSalesData(loadedSalesFiles.map(f => f.parsedData));
     
@@ -435,8 +436,26 @@ export default function SalesAnalyzer() {
         };
     });
     
-    const combinedAttendanceCsv = loadedAttendanceFiles.map(f => f.content).join('\n\n');
-    const combinedSalesCsv = loadedSalesFiles.map(f => f.content).join('\n\n');
+    const combineCsvContent = (files: {content: string}[], isAttendance: boolean): string => {
+        if (files.length === 0) return '';
+        
+        const headerLines = isAttendance ? 3 : 1;
+        const firstFileLines = files[0].content.split(/\r?\n/);
+        const header = firstFileLines.slice(0, headerLines).join('\n');
+        
+        const allDataRows: string[] = [];
+        
+        files.forEach((file, index) => {
+            const lines = file.content.split(/\r?\n/);
+            const dataRows = lines.slice(headerLines);
+            allDataRows.push(...dataRows);
+        });
+
+        return [header, ...allDataRows].join('\n');
+    };
+
+    const combinedAttendanceCsv = combineCsvContent(loadedAttendanceFiles, true);
+    const combinedSalesCsv = combineCsvContent(loadedSalesFiles, false);
 
     let displayDateRange: { start: Date, end: Date } | null = null;
     if (loadedAttendanceFiles.length > 0) {
@@ -770,5 +789,7 @@ export default function SalesAnalyzer() {
     </div>
   );
 }
+
+    
 
     
