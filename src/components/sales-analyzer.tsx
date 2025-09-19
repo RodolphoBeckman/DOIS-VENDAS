@@ -289,6 +289,9 @@ export default function SalesAnalyzer() {
     const newAttendanceFiles: LoadedAttendanceFile[] = [];
     const newSalesFiles: LoadedSalesFile[] = [];
     const errors: string[] = [];
+    const existingAttendanceNames = new Set(loadedAttendanceFiles.map(f => f.name));
+    const existingSalesNames = new Set(loadedSalesFiles.map(f => f.name));
+
 
     const filePromises = Array.from(files).map(file => {
         return new Promise<void>((resolve) => {
@@ -297,12 +300,12 @@ export default function SalesAnalyzer() {
                 try {
                     const text = e.target?.result as string;
                     if (text.includes('At.;Pot.')) {
-                        if (!loadedAttendanceFiles.some(f => f.name === file.name)) {
+                        if (!existingAttendanceNames.has(file.name)) {
                             const { data, dateRange } = parseAttendanceCsv(text);
                             newAttendanceFiles.push({ name: file.name, content: text, dateRange, parsedData: data });
                         }
                     } else {
-                         if (!loadedSalesFiles.some(f => f.name === file.name)) {
+                         if (!existingSalesNames.has(file.name)) {
                             const data = parseSalesCsv(text);
                             newSalesFiles.push({ name: file.name, content: text, parsedData: data });
                         }
@@ -322,8 +325,12 @@ export default function SalesAnalyzer() {
     });
 
     Promise.all(filePromises).then(() => {
-        setLoadedAttendanceFiles(current => [...current, ...newAttendanceFiles]);
-        setLoadedSalesFiles(current => [...current, ...newSalesFiles]);
+        if (newAttendanceFiles.length > 0) {
+            setLoadedAttendanceFiles(current => [...current, ...newAttendanceFiles]);
+        }
+        if (newSalesFiles.length > 0) {
+            setLoadedSalesFiles(current => [...current, ...newSalesFiles]);
+        }
 
         const totalNewFiles = newAttendanceFiles.length + newSalesFiles.length;
         if (totalNewFiles > 0) {
@@ -354,52 +361,51 @@ export default function SalesAnalyzer() {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = pdf.internal.pageSize.getHeight();
-        const margin = 15;
+        const margin = 10;
         let yPos = margin;
 
-        const addElementToPdf = async (element: HTMLElement) => {
+        const addElementToPdf = async (element: HTMLElement, pageBreak = false) => {
             const canvas = await html2canvas(element, { scale: 2, backgroundColor: null });
             const imgData = canvas.toDataURL('image/png');
-            const imgHeight = (canvas.height * (pdfWidth - margin * 2)) / canvas.width;
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgWidth = pdfWidth - margin * 2;
+            const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
-            if (yPos + imgHeight > pdfHeight - margin) {
+            if (pageBreak || (yPos + imgHeight > pdfHeight - margin)) {
                 pdf.addPage();
                 yPos = margin;
             }
 
-            pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight);
-            yPos += imgHeight + 10;
+            pdf.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+            yPos += imgHeight + 5; 
         };
-
-        // Renderiza a coluna da direita primeiro
+        
         await addElementToPdf(rightColumnEl);
         
-        // Agora, renderiza a tabela principal, com paginação
         const canvas = await html2canvas(mainTableEl, { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
-        const imgHeight = (canvas.height * (pdfWidth - margin * 2)) / canvas.width;
-        
-        let heightLeft = imgHeight;
-        let tableYPos = 0;
+        const imgProps = pdf.getImageProperties(imgData);
+        const tableImgWidth = pdfWidth - margin * 2;
+        const tableImgHeight = (imgProps.height * tableImgWidth) / imgProps.width;
 
-        // Adiciona a primeira parte da tabela
-        if (yPos + Math.min(heightLeft, pdfHeight - margin - yPos) > pdfHeight - margin) {
+        let heightLeft = tableImgHeight;
+        let position = 0;
+
+        if (yPos + heightLeft > pdfHeight - margin) {
             pdf.addPage();
             yPos = margin;
         }
-        pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight, undefined, 'FAST', tableYPos);
 
-        heightLeft -= (pdfHeight - yPos - margin);
-        tableYPos += (pdfHeight - yPos - margin) * (canvas.width / (pdfWidth - margin * 2));
+        pdf.addImage(imgData, 'PNG', margin, yPos, tableImgWidth, tableImgHeight);
+        heightLeft -= (pdfHeight - yPos);
 
-        // Adiciona o restante em novas páginas, se necessário
         while (heightLeft > 0) {
+            position += (pdfHeight - yPos);
             pdf.addPage();
-            yPos = margin;
-            pdf.addImage(imgData, 'PNG', margin, yPos, pdfWidth - margin * 2, imgHeight, undefined, 'FAST', tableYPos);
-            heightLeft -= pdfHeight - margin * 2;
-            tableYPos += (pdfHeight - margin * 2) * (canvas.width / (pdfWidth - margin * 2));
+            pdf.addImage(imgData, 'PNG', margin, 10, tableImgWidth, tableImgHeight);
+            heightLeft -= pdfHeight;
         }
+
 
         pdf.save('relatorio-de-vendas.pdf');
 
